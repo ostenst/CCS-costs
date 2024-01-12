@@ -1,0 +1,25 @@
+
+ENERG/MASS BALANCE OF NOMINAL CHP:
+
+Qfuel = 
+Qboiler + Qfgc = mf*HHV     Qboiler,mf,Qfgc
+Qfgc = mf(HHV-LHV)          Qfgc,mf
+Qboiler = m(hA-hC)          Qboiler,m
+P = m(hA-hB)                m,P
+Q = m(hB-hC)                m,Q 6okända 5linjära ekv, let's lock in our power P and then estimate the rest!
+
+=>
+Qboiler + Qfgc - mf*HHV = 0
+Qfgc - mf(HHV-LHV) = 0
+Qboiler - m(hA-hC) = 0
+m(hA-hB) = P
+Q - m(hB-hC) = 0
+
+=>
+[Q, Qboiler, Qfgc, mfuel, msteam]
+[0, 1, 1, -HHV, 0],
+[0, 0, 1, -(HHV-LHV) 0],
+[0, 1, 0, 0, -(hA-hC)],
+[0, 0, 0, 0, (hA-hB)*1.05],          # Adding reheat = 1.05
+[1, 0, 0, 0, -(hB-hC)],
+
