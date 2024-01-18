@@ -74,7 +74,7 @@ class State:
 #     - Concentration of CO2
 
 class CHP:
-    def __init__(self, Name, Fuel=None, Qdh=0, P=0, Qfgc=0, Tsteam=0, psteam=0, Qfuel=0):
+    def __init__(self, Name, Fuel=None, Qdh=0, P=0, Qfgc=0, Tsteam=0, psteam=0, Qfuel=0, Vfg=0):
         self.name = Name
         self.fuel = Fuel
         self.Qdh = Qdh
@@ -83,12 +83,18 @@ class CHP:
         self.Tsteam = Tsteam
         self.psteam = psteam
         self.Qfuel = Qfuel
+        self.Vfg = Vfg
+        if Fuel == "B":
+            self.fCO2 = 0.13
+        elif Fuel == "W":
+            self.fCO2 = 0.09
+        self.states = None
 
     def print_info(self):
-        table_format = "{:<20} {:<10} {:<10} {:<10} {:<10}"
-        print(table_format.format("Name", "P", "Qdh", "Qfuel", "Fuel"))
-        print(table_format.format("-" * 20, "-" * 10, "-" * 10, "-" * 10, "-" * 10))
-        print(table_format.format(self.name, round(self.P), round(self.Qdh), round(self.Qfuel), self.fuel))
+        table_format = "{:<20} {:<10} {:<10} {:<10} {:<10} {:<10}"
+        print(table_format.format("Name", "P", "Qdh", "Qfuel", "Fuel", "Vfg"))
+        print(table_format.format("-" * 20, "-" * 10, "-" * 10, "-" * 10, "-" * 10, "-" * 10))
+        print(table_format.format(self.name, round(self.P), round(self.Qdh), round(self.Qfuel), self.fuel, round(self.Vfg)))
 
     def estimate_performance(self):
         # ENERGY BALANCE
@@ -111,34 +117,29 @@ class CHP:
         if i == max_iterations:
             Pestimated = None
             msteam = 0
+        Qfuel = msteam*(A.h-C.h)
+        self.Qfuel = Qfuel
         self.P = Pestimated             # TODO: Apply uncertainty% to P/Q?
-        self.Qfuel = msteam*(A.h-C.h)
         D = State("D", self.psteam, satL=True)
-        # self.plot_plant(A,B,C,D)
 
         # FLUEGASES
-        qbio = 18.6 #[MJ/kg,dry] is 18.6 correct? No, it Hs!
-        c_content = 0.50
-        q_c = qbio*c_content #[MJ/kgC]
-        nCO2 = 44/12 #[kgCO2/kgC]
-        eCO2 = nCO2/q_c #[kgCO2/MJ]
-        eCO2 = eCO2*3600/1000 #[tCO2/MWh] [GW]*[X]*[h/a] = [tCO2/a] => [X] = [tCO2/h/GW]
-        print(eCO2)
-
-        LHV = 12 # [MJ/kgfuel]
-        c_content = 0.50
-        q_c = LHV*c_content #[MJ/kgC] 
-        nCO2 = 44/12 #[kgCO2/kgC]
-        eCO2 = nCO2/q_c #[kgCO2/MJ]
-        eCO2 = eCO2*3600/1000 #[tCO2/MWh] [GW]*[X] = [tCO2/h] => [X] = [tCO2/GWh]      
-        print(eCO2)
-
-        # TODO: Estimate fluegas volume and CO2 concentration!
+        # qbio = 18.6 #[MJ/kg,dry] is 18.6 correct? No, it Hs!
+        # c_content = 0.50
+        # q_c = qbio*c_content #[MJ/kgC]
+        # nCO2 = 44/12 #[kgCO2/kgC]
+        # eCO2 = nCO2/q_c #[kgCO2/MJ]
+        # eCO2 = eCO2*3600/1000 #[tCO2/MWh] [GW]*[X]*[h/a] = [tCO2/a] => [X] = [tCO2/h/GW]
+        # print(eCO2)
         # Johanna does this easily from Qfuel and fueltype, just one x mulitplication. Nice!
-            
-        # TODO: A "test" function that tells us if this estimate is reasonable or not!
+        mCO2 = Qfuel * 0.355 #[tCO2/h]
+        Vfg = 2000000/110*mCO2/(self.fCO2/0.04) #[m3/h]
+        self.Vfg = Vfg
 
-        return
+        self.states = A,B,C,D
+        if msteam is not None and Pestimated is not None and Qfuel > 0 and pcond_guess > 0 and mCO2 > 0 and Vfg > 0:
+            return A,B,C,D
+        else:
+            raise ValueError("One or more of the variables (msteam, Pestimated, Qfuel, pcond_guess, mCO2, Vfg) is not positive.")
 
     def plot_plant(self,A,B,C,D):
         T_start = 0.01
@@ -186,6 +187,17 @@ data = {
     "Live steam temperature (degC)": [560],
     "Live steam pressure (bar)": [140]
 }
+# data = {
+#     "City": ["Stockholm (South)"],
+#     "Plant Name": ["IGELSTA"],
+#     "Fuel (W=waste, B=biomass)": ["B"],
+#     "Heat output (MWheat)": [155],
+#     "Electric output (MWe)": [85],
+#     "Existing FGC heat output (MWheat)": [60],
+#     "Year of commissioning": [2016],
+#     "Live steam temperature (degC)": [540],
+#     "Live steam pressure (bar)": [90]
+# }
 
 # Creating a DataFrame
 df = pd.DataFrame(data)
@@ -205,6 +217,7 @@ chp = CHP(
 )
 
 chp.print_info()
-chp.estimate_performance()
+A,B,C,D = chp.estimate_performance()
+chp.plot_plant(A,B,C,D)
 chp.print_info()
-print(steamTable.tsat_p(0.7))
+
