@@ -5,6 +5,7 @@ Later, the Controller() will ask the Model() to run many times given plant_data.
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
+from scipy.optimize import fsolve
 from pyXSteam.XSteam import XSteam
 steamTable = XSteam(XSteam.UNIT_SYSTEM_MKS)
 class State:
@@ -73,64 +74,71 @@ class State:
 #     - Concentration of CO2
 
 class CHP:
-    def __init__(self,Name,Fuel=None,Q=0,P=0,Qfgc=0,Tsteam=0,psteam=0):
+    def __init__(self, Name, Fuel=None, Qdh=0, P=0, Qfgc=0, Tsteam=0, psteam=0, Qfuel=0):
         self.name = Name
         self.fuel = Fuel
-        self.Q = Q
+        self.Qdh = Qdh
         self.P = P
         self.Qfgc = Qfgc
         self.Tsteam = Tsteam
         self.psteam = psteam
+        self.Qfuel = Qfuel
+
+    def print_info(self):
+        table_format = "{:<20} {:<10} {:<10} {:<10} {:<10}"
+        print(table_format.format("Name", "P", "Qdh", "Qfuel", "Fuel"))
+        print(table_format.format("-" * 20, "-" * 10, "-" * 10, "-" * 10, "-" * 10))
+        print(table_format.format(self.name, round(self.P), round(self.Qdh), round(self.Qfuel), self.fuel))
 
     def estimate_performance(self):
-        # Assuming condensation pressure at 1 bar (0.4-1.2 is typical range) and eta_is=0.88:
-        p_condenser = 1
-        eta_is = 1 #Seems like this perfect expansion "counterbalances" any missing reheat% and other efficiency gains.
-        HHV = 10.2*1000 #[kJ/kg]
-        LHV = 8.2*1000 #[kJ/kg]
-        C_content = 0.50 #TODO: define a general fuel instead properly, since this gives fluegas volume. Check Ebsilon for Lambda? Check LHV/HHV, how to handle? Should link to M_content.
-        M_content = 0.40
-        t = 8760*0.70
-
+        # ENERGY BALANCE
+        Ptarget = self.P
+        Qdh = self.Qdh
         A = State("A", self.psteam, self.Tsteam)
-        Bis = State("Bis", p=p_condenser, s=A.s, mix=True)
-        hB = A.h - (A.h-Bis.h)*eta_is
-        if steamTable.x_ph(p_condenser,hB)==1:
-            B = State("B", p_condenser,steamTable.t_ph(p_condenser,hB))
-        else:  
-            B = State("B", p_condenser,s=steamTable.s_ph(p_condenser, hB), mix=True)
-        C = State("C", p_condenser, satL=True)
+
+        max_iterations = 100
+        pcond_guess = 2
+        Pestimated = 0
+        i = 0
+        tol = 0.05
+        while abs(Pestimated - Ptarget) > Ptarget*tol and i < max_iterations:
+            pcond_guess = pcond_guess - 0.1
+            B = State("B", p=pcond_guess, s=A.s, mix=True)
+            C = State("C", pcond_guess, satL=True)
+            msteam = Qdh/(B.h-C.h)
+            Pestimated = msteam*(A.h-B.h)
+            i += 1
+        if i == max_iterations:
+            Pestimated = None
+            msteam = 0
+        self.P = Pestimated             # TODO: Apply uncertainty% to P/Q?
+        self.Qfuel = msteam*(A.h-C.h)
         D = State("D", self.psteam, satL=True)
+        # self.plot_plant(A,B,C,D)
 
-        energy_balance = np.array([
-        [0, 1, 1, -HHV, 0],
-        [0, 0, 1, -(HHV-LHV), 0],
-        [0, 1, 0, 0, -(A.h-C.h)],
-        [0, 0, 0, 0, (A.h-B.h)],
-        [1, 0, 0, 0, -(B.h-C.h)],
-        ])
-        constants = [0, 0, 0, self.P*1000, 0]
-        [Q, Qboiler, Qfgc, mfuel, msteam] = np.linalg.solve(energy_balance, constants)
-        mCO2 = mfuel*(1-M_content)/1000 * C_content*44/12 * t*3600 #tCO2/yr
+        # FLUEGASES
+        qbio = 18.6 #[MJ/kg,dry] is 18.6 correct? No, it Hs!
+        c_content = 0.50
+        q_c = qbio*c_content #[MJ/kgC]
+        nCO2 = 44/12 #[kgCO2/kgC]
+        eCO2 = nCO2/q_c #[kgCO2/MJ]
+        eCO2 = eCO2*3600/1000 #[tCO2/MWh] [GW]*[X]*[h/a] = [tCO2/a] => [X] = [tCO2/h/GW]
+        print(eCO2)
 
-        results = {
-            'P' : self.P*1000,
-            'QDH': Q,
-            'Qboiler': Qboiler,
-            'Qfgc': Qfgc,
-            'mfuel': mfuel,
-            'msteam': msteam,
-            'mCO2' : mCO2
-        }
-        print("Results:")
-        for variable, value in results.items():
-            print(f"{variable}: {value}")
-        # self.plot_plant(A,B,C,D) 
-            
+        LHV = 12 # [MJ/kgfuel]
+        c_content = 0.50
+        q_c = LHV*c_content #[MJ/kgC] 
+        nCO2 = 44/12 #[kgCO2/kgC]
+        eCO2 = nCO2/q_c #[kgCO2/MJ]
+        eCO2 = eCO2*3600/1000 #[tCO2/MWh] [GW]*[X] = [tCO2/h] => [X] = [tCO2/GWh]      
+        print(eCO2)
 
         # TODO: Estimate fluegas volume and CO2 concentration!
+        # Johanna does this easily from Qfuel and fueltype, just one x mulitplication. Nice!
             
         # TODO: A "test" function that tells us if this estimate is reasonable or not!
+
+        return
 
     def plot_plant(self,A,B,C,D):
         T_start = 0.01
@@ -160,10 +168,11 @@ class CHP:
 
         def draw_line(state1, state2, color='g'):
             plt.plot([state1.s, state2.s], [state1.T, state2.T], linestyle='-', color=color)
-        draw_line(A, B, color='b')
+        draw_line(A, B, color='cornflowerblue')
         draw_line(B, C, color='cornflowerblue')
-        draw_line(C, D, color='cornflowerblue')
-        draw_line(D, A, color='b')
+        draw_line(C, D, color='b')
+        draw_line(D, State(" ", self.psteam, satV=True), color='b')
+        draw_line(State(" ", self.psteam, satV=True), A, color='b')
         plt.show()
 
 data = {
@@ -188,11 +197,14 @@ x = df.iloc[0]
 chp = CHP(
     Name=x["Plant Name"],
     Fuel=x["Fuel (W=waste, B=biomass)"],
-    Q=x["Heat output (MWheat)"],
+    Qdh=x["Heat output (MWheat)"],
     P=x["Electric output (MWe)"],
     Qfgc=x["Existing FGC heat output (MWheat)"],
     Tsteam=x["Live steam temperature (degC)"],
     psteam=x["Live steam pressure (bar)"]
 )
 
+chp.print_info()
 chp.estimate_performance()
+chp.print_info()
+print(steamTable.tsat_p(0.7))
