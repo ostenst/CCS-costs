@@ -114,13 +114,13 @@ class CHP:
             msteam = Qdh/(B.h-C.h)
             Pestimated = msteam*(A.h-B.h)
             i += 1
+        D = State("D", self.psteam, satL=True)
         if i == max_iterations:
             Pestimated = None
             msteam = 0
         Qfuel = msteam*(A.h-C.h)
         self.Qfuel = Qfuel
         self.P = Pestimated             # TODO: Apply uncertainty% to P/Q?
-        D = State("D", self.psteam, satL=True)
 
         # FLUEGASES
         # qbio = 18.6 #[MJ/kg,dry] is 18.6 correct? No, it Hs!
@@ -137,11 +137,12 @@ class CHP:
 
         self.states = A,B,C,D
         if msteam is not None and Pestimated is not None and Qfuel > 0 and pcond_guess > 0 and mCO2 > 0 and Vfg > 0:
-            return A,B,C,D
+            return
         else:
             raise ValueError("One or more of the variables (msteam, Pestimated, Qfuel, pcond_guess, mCO2, Vfg) is not positive.")
 
-    def plot_plant(self,A,B,C,D):
+    def plot_plant(self):
+        A,B,C,D = self.states
         T_start = 0.01
         T_end = 373.14
         num_points = 100  
@@ -201,11 +202,13 @@ data = {
 
 # Creating a DataFrame
 df = pd.DataFrame(data)
-x = df.iloc[0]
+
 #Select the DH system here somehow. Dont care about year.
 #DH average temp is 47C return and 86C supply
 
 # // MAIN //
+# Select our plant
+x = df.iloc[0]
 chp = CHP(
     Name=x["Plant Name"],
     Fuel=x["Fuel (W=waste, B=biomass)"],
@@ -215,9 +218,15 @@ chp = CHP(
     Tsteam=x["Live steam temperature (degC)"],
     psteam=x["Live steam pressure (bar)"]
 )
-
-chp.print_info()
-A,B,C,D = chp.estimate_performance()
-chp.plot_plant(A,B,C,D)
 chp.print_info()
 
+# Estimate it's performance
+chp.estimate_performance()
+chp.print_info()
+chp.plot_plant()
+print("%CO2 input for Aspen:", chp.fCO2)
+print("Volume input for Aspen:", chp.Vfg)
+
+# Size a MEA CCS unit
+# To do this, I need to run the Aspen model for many fCO2 and Vfg and record the SIZES = f(costs). 
+# I can close this for now, go to StuDat(Aspen) and prepare an equipment list in Excel
