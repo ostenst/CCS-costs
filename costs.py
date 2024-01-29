@@ -5,8 +5,9 @@ Later, the Controller() will ask the Model() to run many times given plant_data.
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
-from scipy.optimize import fsolve
 from pyXSteam.XSteam import XSteam
+from sklearn.linear_model import LinearRegression
+
 steamTable = XSteam(XSteam.UNIT_SYSTEM_MKS)
 class State:
     def __init__(self, Name, p=None, T=None, s=None, satL=False, satV=False, mix=False):
@@ -74,7 +75,7 @@ class State:
 #     - Concentration of CO2
 
 class CHP:
-    def __init__(self, Name, Fuel=None, Qdh=0, P=0, Qfgc=0, Tsteam=0, psteam=0, Qfuel=0, Vfg=0):
+    def __init__(self, Name, Fuel=None, Qdh=0, P=0, Qfgc=0, Tsteam=0, psteam=0, Qfuel=0, Vfg=0, mCO2=0):
         self.name = Name
         self.fuel = Fuel
         self.Qdh = Qdh
@@ -84,6 +85,8 @@ class CHP:
         self.psteam = psteam
         self.Qfuel = Qfuel
         self.Vfg = Vfg
+        self.mCO2 = mCO2
+
         if Fuel == "B":
             self.fCO2 = 0.13
         elif Fuel == "W":
@@ -92,11 +95,11 @@ class CHP:
 
     def print_info(self):
         table_format = "{:<20} {:<10} {:<10} {:<10} {:<10} {:<10}"
-        print(table_format.format("Name", "P", "Qdh", "Qfuel", "Fuel", "Vfg"))
+        print(table_format.format("Name", "P", "Qdh+fc", "Qfuel", "Fuel", "Vfg"))
         print(table_format.format("-" * 20, "-" * 10, "-" * 10, "-" * 10, "-" * 10, "-" * 10))
-        print(table_format.format(self.name, round(self.P), round(self.Qdh), round(self.Qfuel), self.fuel, round(self.Vfg)))
+        print(table_format.format(self.name, round(self.P), round(self.Qdh+self.Qfgc), round(self.Qfuel), self.fuel, round(self.Vfg)))
 
-    def estimate_performance(self):
+    def estimate_performance(self, plotting=False):
         # ENERGY BALANCE
         Ptarget = self.P
         Qdh = self.Qdh
@@ -131,13 +134,16 @@ class CHP:
         # eCO2 = eCO2*3600/1000 #[tCO2/MWh] [GW]*[X]*[h/a] = [tCO2/a] => [X] = [tCO2/h/GW]
         # print(eCO2)
         # Johanna does this easily from Qfuel and fueltype, just one x mulitplication. Nice!
-        mCO2 = Qfuel * 0.355 #[tCO2/h]
-        Vfg = 2000000/110*mCO2/(self.fCO2/0.04) #[m3/h]
+        self.mCO2 = Qfuel * 0.355 #[tCO2/h]
+        Vfg = 2000000/110*self.mCO2/(self.fCO2/0.04) #[m3/h]
         self.Vfg = Vfg
 
         self.states = A,B,C,D
-        if msteam is not None and Pestimated is not None and Qfuel > 0 and pcond_guess > 0 and mCO2 > 0 and Vfg > 0:
-            return A,B,C,D
+        if plotting == True:
+            self.plot_plant(A,B,C,D)
+
+        if msteam is not None and Pestimated is not None and Qfuel > 0 and pcond_guess > 0 and self.mCO2 > 0 and Vfg > 0:
+            return 
         else:
             raise ValueError("One or more of the variables (msteam, Pestimated, Qfuel, pcond_guess, mCO2, Vfg) is not positive.")
 
@@ -176,28 +182,28 @@ class CHP:
         draw_line(State(" ", self.psteam, satV=True), A, color='b')
         plt.show()
 
-data = {
-    "City": ["Stockholm (South)"],
-    "Plant Name": ["Värtaverket KVV 8"],
-    "Fuel (W=waste, B=biomass)": ["B"],
-    "Heat output (MWheat)": [215],
-    "Electric output (MWe)": [130],
-    "Existing FGC heat output (MWheat)": [90],
-    "Year of commissioning": [2016],
-    "Live steam temperature (degC)": [560],
-    "Live steam pressure (bar)": [140]
-}
 # data = {
 #     "City": ["Stockholm (South)"],
-#     "Plant Name": ["IGELSTA"],
+#     "Plant Name": ["Värtaverket KVV 8"],
 #     "Fuel (W=waste, B=biomass)": ["B"],
-#     "Heat output (MWheat)": [155],
-#     "Electric output (MWe)": [85],
-#     "Existing FGC heat output (MWheat)": [60],
+#     "Heat output (MWheat)": [215],
+#     "Electric output (MWe)": [130],
+#     "Existing FGC heat output (MWheat)": [90],
 #     "Year of commissioning": [2016],
-#     "Live steam temperature (degC)": [540],
-#     "Live steam pressure (bar)": [90]
+#     "Live steam temperature (degC)": [560],
+#     "Live steam pressure (bar)": [140]
 # }
+data = {
+    "City": ["Göteborg"],
+    "Plant Name": ["Renova"],
+    "Fuel (W=waste, B=biomass)": ["W"],
+    "Heat output (MWheat)": [126],
+    "Electric output (MWe)": [45],
+    "Existing FGC heat output (MWheat)": [38],
+    "Year of commissioning": [1995],
+    "Live steam temperature (degC)": [400],
+    "Live steam pressure (bar)": [40]
+}
 
 # Creating a DataFrame
 df = pd.DataFrame(data)
@@ -217,7 +223,103 @@ chp = CHP(
 )
 
 chp.print_info()
-A,B,C,D = chp.estimate_performance()
-chp.plot_plant(A,B,C,D)
+chp.estimate_performance(plotting=False)
+print(" ... now plant performance was estimated to:")
 chp.print_info()
 
+
+# SEND FLUEGASES TO SIZING
+#TODO: DEFINE A "CCS OJBECT CLASS" WHICH HOLDS ASPEN_DATA; COSTS ETC.
+df = pd.read_csv("MEA_testdata.csv", sep=";", header=None, index_col=0)
+Aspen_data = df.transpose()
+print(Aspen_data)
+# print(df["M_FLUEGAS"].values[0]/df["RHO_FLUEGAS"].values[0]*3600) #m3/h ok compared to Johanna estimate
+
+# # HERE I ESTIMATE THE SIZES USING LINEAR REGRESSION. TODO: MAKE PROPER MEA_TESTDATA FIRST
+# # Extracting the relevant columns
+# #def 
+# X = df[["M_FLUEGAS"]]
+# y = df["A_B4"]
+# print(X)
+# print(y)
+
+# # Create a linear regression model
+# model = LinearRegression()
+
+# # Fit the model
+# model.fit(X, y)
+
+# # Print the coefficients
+# print("Intercept:", model.intercept_)
+# print("Coefficient:", model.coef_[0])
+
+# # Make predictions
+# predictions = model.predict(X)
+
+# # Plotting the actual vs. predicted values
+# plt.scatter(X, y, label="Actual values")
+# plt.plot(X, predictions, color='red', label="Predicted values")
+# plt.xlabel("M_FLUEGAS")
+# plt.ylabel("A_B4")
+# plt.legend()
+# plt.show()
+
+def estimate_cost(equipment,df,year):
+    HEX_list = ['B4', 'COOL1', 'COOL2', 'COOL3', 'DCCHX', 'DRYCOOL', 'DUMCOOL', 'HEX', 'B5', 'PA2627']
+    pump_list = ['DCCPUMP','PUMP']
+    tower_list = ['STRIPPER','WASHER','DCC','ABSORBER']
+    flash_list = ['FLASH1','FLASH2','DRYFLASH']
+
+    if equipment in HEX_list:
+        key = 'A_' + equipment
+        area = df[key][1]
+        cost = 2.8626 * area**0.7988
+
+    if equipment in pump_list:
+        key = 'VT_' + equipment
+        volumeflow = df[key][1]
+        cost = 32.147 * (volumeflow*1000)**0.6029 #L/s
+
+    if equipment in tower_list:
+        key = 'D_' + equipment
+        diameter = df[key][1]
+        key = 'H_' + equipment
+        height = df[key][1]
+        volume = 3.1415 * diameter**2/4 * height
+        cost = 91.764 * volume**0.6154
+
+    if equipment in flash_list:
+        key = 'V_' + equipment
+        volume = df[key][1]
+        cost = 66.927 * volume**0.5047
+
+    if equipment == 'REBOIL':
+        key = 'A_' + equipment
+        area = df[key][1]
+        cost = 1.6758 * area**0.8794
+    
+    if equipment == 'G311':
+        key = 'W_' + equipment
+        work = df[key][1]
+        print("COST FUNCTION OF COMPRESSORS NOT DEFINED")
+        cost = 0
+
+    # TODO: Apply currency conversion here.
+        
+    print(f"Equipment: {equipment}, Cost: {cost} kEUR")
+    return cost
+
+year = 2024
+equipment_list = ['B4', 'COOL1', 'COOL2', 'COOL3', 'DCCHX', 'DRYCOOL', 'DUMCOOL', 'HEX', 'B5', 'PA2627', 'DCCPUMP',
+                  'PUMP','STRIPPER','WASHER','DCC','ABSORBER','FLASH1','FLASH2','DRYFLASH', 'REBOIL', 'G311']
+TDC = []
+for equipment in equipment_list:
+    direct_cost = estimate_cost(equipment,Aspen_data,year)
+    TDC.append(direct_cost)
+TDC = np.sum(TDC)
+
+# TODO: select 1-3 cost escalation methods? And make this a categorical choice? They are all based on the TDC anyway! And not too difficult to find values for?
+process_contingency = 0.15
+indirect_costs = 0.25
+project_contingency = 0.40
+owners_costs = 0.095
