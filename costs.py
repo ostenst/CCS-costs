@@ -227,99 +227,178 @@ chp.estimate_performance(plotting=False)
 print(" ... now plant performance was estimated to:")
 chp.print_info()
 
-
 # SEND FLUEGASES TO SIZING
-#TODO: DEFINE A "CCS OJBECT CLASS" WHICH HOLDS ASPEN_DATA; COSTS ETC.
 df = pd.read_csv("MEA_testdata.csv", sep=";", header=None, index_col=0)
 Aspen_data = df.transpose()
 print(Aspen_data)
-# print(df["M_FLUEGAS"].values[0]/df["RHO_FLUEGAS"].values[0]*3600) #m3/h ok compared to Johanna estimate
 
-# # HERE I ESTIMATE THE SIZES USING LINEAR REGRESSION. TODO: MAKE PROPER MEA_TESTDATA FIRST
-# # Extracting the relevant columns
-# #def 
-# X = df[["M_FLUEGAS"]]
-# y = df["A_B4"]
-# print(X)
-# print(y)
+class MEA_plant:
+    def __init__(self, Aspen_data, construction_year=2024, currency_factor=0, discount=0.08, lifetime=25, duration=8000):
+        self.data = Aspen_data
+        self.mfluegas = Aspen_data["M_FLUEGAS"].values[0]
+        self.rhofluegas = Aspen_data["RHO_FLUEGAS"].values[0]
+        #self.data_sized = None THIS IS THE DATAFRAME THAT SHOULD BE SENT TO direct_cost
 
-# # Create a linear regression model
-# model = LinearRegression()
-
-# # Fit the model
-# model.fit(X, y)
-
-# # Print the coefficients
-# print("Intercept:", model.intercept_)
-# print("Coefficient:", model.coef_[0])
-
-# # Make predictions
-# predictions = model.predict(X)
-
-# # Plotting the actual vs. predicted values
-# plt.scatter(X, y, label="Actual values")
-# plt.plot(X, predictions, color='red', label="Predicted values")
-# plt.xlabel("M_FLUEGAS")
-# plt.ylabel("A_B4")
-# plt.legend()
-# plt.show()
-
-def estimate_cost(equipment,df,year):
-    HEX_list = ['B4', 'COOL1', 'COOL2', 'COOL3', 'DCCHX', 'DRYCOOL', 'DUMCOOL', 'HEX', 'B5', 'PA2627']
-    pump_list = ['DCCPUMP','PUMP']
-    tower_list = ['STRIPPER','WASHER','DCC','ABSORBER']
-    flash_list = ['FLASH1','FLASH2','DRYFLASH']
-
-    if equipment in HEX_list:
-        key = 'A_' + equipment
-        area = df[key][1]
-        cost = 2.8626 * area**0.7988
-
-    if equipment in pump_list:
-        key = 'VT_' + equipment
-        volumeflow = df[key][1]
-        cost = 32.147 * (volumeflow*1000)**0.6029 #L/s
-
-    if equipment in tower_list:
-        key = 'D_' + equipment
-        diameter = df[key][1]
-        key = 'H_' + equipment
-        height = df[key][1]
-        volume = 3.1415 * diameter**2/4 * height
-        cost = 91.764 * volume**0.6154
-
-    if equipment in flash_list:
-        key = 'V_' + equipment
-        volume = df[key][1]
-        cost = 66.927 * volume**0.5047
-
-    if equipment == 'REBOIL':
-        key = 'A_' + equipment
-        area = df[key][1]
-        cost = 1.6758 * area**0.8794
-    
-    if equipment == 'G311':
-        key = 'W_' + equipment
-        work = df[key][1]
-        print("COST FUNCTION OF COMPRESSORS NOT DEFINED")
-        cost = 0
-
-    # TODO: Apply currency conversion here.
-        
-    print(f"Equipment: {equipment}, Cost: {cost} kEUR")
-    return cost
-
-year = 2024
-equipment_list = ['B4', 'COOL1', 'COOL2', 'COOL3', 'DCCHX', 'DRYCOOL', 'DUMCOOL', 'HEX', 'B5', 'PA2627', 'DCCPUMP',
+        self.equipment_list = ['B4', 'COOL1', 'COOL2', 'COOL3', 'DCCHX', 'DRYCOOL', 'DUMCOOL', 'HEX', 'B5', 'PA2627', 'DCCPUMP',
                   'PUMP','STRIPPER','WASHER','DCC','ABSORBER','FLASH1','FLASH2','DRYFLASH', 'REBOIL', 'G311']
-TDC = []
-for equipment in equipment_list:
-    direct_cost = estimate_cost(equipment,Aspen_data,year)
-    TDC.append(direct_cost)
-TDC = np.sum(TDC)
+        self.construction_year = construction_year
+        self.currency_factor = currency_factor
+        self.discount = discount
+        self.lifetime = lifetime
+        self.annualization = 0
+        for n in range(1, lifetime):
+            self.annualization += 1/(1 + discount)**n
+        self.duration = duration
 
-# TODO: select 1-3 cost escalation methods? And make this a categorical choice? They are all based on the TDC anyway! And not too difficult to find values for?
-process_contingency = 0.15
-indirect_costs = 0.25
-project_contingency = 0.40
-owners_costs = 0.095
+    # def linearRegression(Aspen_data):
+        # TODO: MAKE PROPER MEA_TESTDATA FIRST
+        # return SIZES
+
+    def direct_cost(self, equipment): #TODO: Double check these, also compressor function?
+        df = self.data
+        HEX_list = ['B4', 'COOL1', 'COOL2', 'COOL3', 'DCCHX', 'DRYCOOL', 'DUMCOOL', 'HEX', 'B5', 'PA2627']
+        pump_list = ['DCCPUMP','PUMP']
+        tower_list = ['STRIPPER','WASHER','DCC','ABSORBER']
+        flash_list = ['FLASH1','FLASH2','DRYFLASH']
+
+        if equipment in HEX_list:
+            key = 'A_' + equipment
+            area = df[key][1]
+            cost = 2.8626 * area**0.7988
+
+        if equipment in pump_list:
+            key = 'VT_' + equipment
+            volumeflow = df[key][1]
+            cost = 32.147 * (volumeflow*1000)**0.6029 #L/s
+
+        if equipment in tower_list:
+            key = 'D_' + equipment
+            diameter = df[key][1]
+            key = 'H_' + equipment
+            height = df[key][1]
+            volume = 3.1415 * diameter**2/4 * height
+            cost = 91.764 * volume**0.6154
+
+        if equipment in flash_list:
+            key = 'V_' + equipment
+            volume = df[key][1]
+            cost = 66.927 * volume**0.5047
+
+        if equipment == 'REBOIL':
+            key = 'A_' + equipment
+            area = df[key][1]
+            cost = 1.6758 * area**0.8794
+        
+        if equipment == 'G311':
+            key = 'W_' + equipment
+            work = df[key][1]
+            print("COST FUNCTION OF COMPRESSORS NOT DEFINED")
+            cost = 0
+
+        # TODO: Apply currency conversion here.
+            
+        print(f"Equipment: {equipment}, Cost: {cost} kEUR")
+        return cost
+
+    def NOAK_escalation(self, TDC):
+        # aCAPEX:
+        process_contingency = 0.15
+        TDCPC = TDC*(1 + process_contingency)
+        indirect_costs = 0.25
+        EPC = TDCPC*(1 + indirect_costs)
+        project_contingency = 0.30
+        TPC = EPC*(1 + project_contingency) #Use for OPEX
+        ownercost_interest = 0.095
+        TCR = TPC*(1 + ownercost_interest)
+
+        print("TCR specific", self.specific_annualized(TCR) )
+        aCAPEX = TCR/self.annualization
+        print("aCAPEX",aCAPEX)
+
+        # OPEX (non-energy): (Site-TEA-Tharun)
+        mMEA = self.data["M_MAKEUP"].values[0]      #kg/s
+        mMEA = mMEA/1000 * 3600*self.duration       #tMEA/a
+        cost_MEA = mMEA * 1.7                       #kEUR/a TODO: CHECK THIS; IT'S SUPER HIGH???
+
+        mH2O = self.data["M_H2OIN"].values[0]       #kg/s
+        mH2O = mH2O/1000 * 3600*self.duration       #tH2O/a
+        cost_H2O = mH2O * 0.02/1000                 #kEUR/a 
+       
+        cost_maintenance = TPC * 0.045              #kEUR/a 
+        cost_labor = 411                            #kEUR/a 
+        print(cost_H2O, cost_MEA, cost_maintenance, cost_labor)
+        print(sum([cost_H2O, cost_MEA, cost_maintenance, cost_labor]))
+
+        return aCAPEX
+    
+    def FOAK_escalation(self, TDC, redundancy):
+        # Add +100% redundancy to some equipment:
+        TDC = TDC + redundancy*(1.0)
+
+        # aCAPEX:
+        process_contingency = 0.30
+        TDCPC = TDC*(1 + process_contingency)
+        indirect_costs = 0.25
+        EPC = TDCPC*(1 + indirect_costs)
+        project_contingency = 0.50
+        TPC = EPC*(1 + project_contingency) #Use for OPEX
+        ownercost_interest = 0.095
+        TCR = TPC*(1 + ownercost_interest)
+
+        print("TCR specific", self.specific_annualized(TCR) )
+        aCAPEX = TCR/self.annualization
+        print("aCAPEX",aCAPEX)
+
+        # OPEX (non-energy): (Site-TEA-Tharun)
+        mMEA = self.data["M_MAKEUP"].values[0]      #kg/s
+        mMEA = mMEA/1000 * 3600*self.duration       #tMEA/a
+        cost_MEA = mMEA * 1.7                       #kEUR/a TODO: CHECK THIS; IT'S SUPER HIGH???
+
+        mH2O = self.data["M_H2OIN"].values[0]       #kg/s
+        mH2O = mH2O/1000 * 3600*self.duration       #tH2O/a
+        cost_H2O = mH2O * 0.02/1000                 #kEUR/a 
+       
+        cost_maintenance = TPC * 0.045              #kEUR/a 
+        cost_labor = 411                            #kEUR/a 
+        print(cost_H2O, cost_MEA, cost_maintenance, cost_labor)
+        print(sum([cost_H2O, cost_MEA, cost_maintenance, cost_labor]))
+
+        return aCAPEX
+
+    def specific_annualized(self, cost):
+        cost = cost/self.annualization              #kEUR,annualized
+        mCO2 = self.data["MCO2_CO2OUT"].values[0]   #kgCO2/s
+        mCO2 = mCO2/1000 * 3600*self.duration       #tCO2/a
+        cost_specific = cost/mCO2 * 1000            #EUR/tCO2
+        return cost_specific
+# NOAK factors:                 SOURCES:
+# PC = 0-10                     white paper
+# IC = 25 (14 EBTF)             site-TEA Tharun/Max
+# Proj cont = 30                white paper
+# OC&Interest = 9.5 (15 EBTF, maybe 7 Rubin) site-TEA Tharun/Max
+
+# FOAK factors (intended for TRL6-7, according to Rubin whitepaper):
+# PC = 20-35 (for TRL 5-6) or 30-70 (for TRL4)  white paper
+# IC = 25 (14 EBTF)             site-TEA Tharun/Max
+# Proj cont = 50                white paper
+# OC&Interest = 9.5 (15 EBTF, maybe 7 Rubin) site-TEA Tharun/Max
+# Also add redundancy etc.      white paper
+
+MEA = MEA_plant(Aspen_data) #SHOULD BE FUNCTION OF VOLUME FLOW, AND PERCENTAGE
+
+TDC = 0
+redundancy = 0
+for equipment in MEA.equipment_list:
+    direct_cost = MEA.direct_cost(equipment)
+    TDC += direct_cost
+
+    if equipment in ['DCCPUMP','PUMP','G311','FLASH1','FLASH2','DRYFLASH']: #TODO: What components should have redundancy? What %level? Or just apply 1 factor?
+        redundancy += direct_cost
+
+print(TDC)
+print(redundancy)
+print("TDC specific", MEA.specific_annualized(TDC) )
+
+MEA.NOAK_escalation(TDC)
+
+MEA.FOAK_escalation(TDC,redundancy)
