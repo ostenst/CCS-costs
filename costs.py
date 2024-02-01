@@ -4,6 +4,7 @@ Later, the Controller() will ask the Model() to run many times given plant_data.
 """
 import pandas as pd
 import numpy as np
+import math
 import matplotlib.pyplot as plt
 from pyXSteam.XSteam import XSteam
 from sklearn.linear_model import LinearRegression
@@ -75,7 +76,7 @@ class State:
 #     - Concentration of CO2
 
 class CHP:
-    def __init__(self, Name, Fuel=None, Qdh=0, P=0, Qfgc=0, Tsteam=0, psteam=0, Qfuel=0, Vfg=0, mCO2=0):
+    def __init__(self, Name, Fuel=None, Qdh=0, P=0, Qfgc=0, Tsteam=0, psteam=0, Qfuel=0, Vfg=0, mCO2=0, duration=8000):
         self.name = Name
         self.fuel = Fuel
         self.Qdh = Qdh
@@ -86,6 +87,7 @@ class CHP:
         self.Qfuel = Qfuel
         self.Vfg = Vfg
         self.mCO2 = mCO2
+        self.duration = duration
 
         if Fuel == "B":
             self.fCO2 = 0.13
@@ -228,19 +230,20 @@ print(" ... now plant performance was estimated to:")
 chp.print_info()
 
 # SEND FLUEGASES TO SIZING
-df = pd.read_csv("MEA_testdata.csv", sep=";", header=None, index_col=0)
+df = pd.read_csv("MEA_testdata.csv", sep=";", header=None, index_col=0) #TODO: Consider storing in dict, superfast!
 Aspen_data = df.transpose()
 print(Aspen_data)
 
 class MEA_plant:
-    def __init__(self, Aspen_data, construction_year=2024, currency_factor=0, discount=0.08, lifetime=25, duration=8000):
+    def __init__(self, host_plant, Aspen_data, construction_year=2024, currency_factor=0, discount=0.08, lifetime=25):
+        self.host = host_plant
         self.data = Aspen_data
         self.mfluegas = Aspen_data["M_FLUEGAS"].values[0]
         self.rhofluegas = Aspen_data["RHO_FLUEGAS"].values[0]
         #self.data_sized = None THIS IS THE DATAFRAME THAT SHOULD BE SENT TO direct_cost
 
         self.equipment_list = ['B4', 'COOL1', 'COOL2', 'COOL3', 'DCCHX', 'DRYCOOL', 'DUMCOOL', 'HEX', 'B5', 'PA2627', 'DCCPUMP',
-                  'PUMP','STRIPPER','WASHER','DCC','ABSORBER','FLASH1','FLASH2','DRYFLASH', 'REBOIL', 'G311']
+                  'PUMP','STRIPPER','WASHER','DCC','ABSORBER','FLASH1','FLASH2','DRYFLASH', 'REBOIL', 'B311']
         self.construction_year = construction_year
         self.currency_factor = currency_factor
         self.discount = discount
@@ -248,20 +251,22 @@ class MEA_plant:
         self.annualization = 0
         for n in range(1, lifetime):
             self.annualization += 1/(1 + discount)**n
-        self.duration = duration
+        self.duration = host_plant.duration
 
     # def linearRegression(Aspen_data):
         # TODO: MAKE PROPER MEA_TESTDATA FIRST
         # return SIZES
 
-    def direct_cost(self, equipment): #TODO: Double check these, also compressor function?
-        df = self.data
+    def direct_cost(self, equipment): 
+        #TODO: Double check these, also compressor function?
+        #TODO: Missing COMPRESSION&LIQUEFACTION stages!
+        df = self.data #TODO: ASPEN DATA HAS SOME SIZES, BUT NOT ALL! SOME ARE GIVEN BY ENERGY BALANCE (HEXs)
         HEX_list = ['B4', 'COOL1', 'COOL2', 'COOL3', 'DCCHX', 'DRYCOOL', 'DUMCOOL', 'HEX', 'B5', 'PA2627']
         pump_list = ['DCCPUMP','PUMP']
         tower_list = ['STRIPPER','WASHER','DCC','ABSORBER']
         flash_list = ['FLASH1','FLASH2','DRYFLASH']
 
-        if equipment in HEX_list:
+        if equipment in HEX_list:                               #TODO: Calculate Areas in E-BALANCE function first! Where HEATPUMPS can be installed for full recovery, but (later, PaperIII) be operated flexibly.
             key = 'A_' + equipment
             area = df[key][1]
             cost = 2.8626 * area**0.7988
@@ -271,7 +276,7 @@ class MEA_plant:
             volumeflow = df[key][1]
             cost = 32.147 * (volumeflow*1000)**0.6029 #L/s
 
-        if equipment in tower_list:
+        if equipment in tower_list: #TODO: CHECK ABSORBER DIMENSIONS; PROBABLY WRONG IN EXCEL
             key = 'D_' + equipment
             diameter = df[key][1]
             key = 'H_' + equipment
@@ -285,19 +290,21 @@ class MEA_plant:
             cost = 66.927 * volume**0.5047
 
         if equipment == 'REBOIL':
-            key = 'A_' + equipment
-            area = df[key][1]
-            cost = 1.6758 * area**0.8794
+            key = 'Q_' + equipment
+            Qreb = df[key][1]
+            U = 1.5 #kW/m2K (Biermann)
+            dT1 = 131.1-121.09  #Assuming reboiler temps. and dTmin #TODO: MOVE THIS TO THE E-BALANCE FUNCTION
+            dT2 = 131.09-121.1
+            LMTD = (dT1 - dT2)/math.log(dT1/dT2)
+            A = Qreb/(U*LMTD)
+            cost = 1.6758 * A**0.8794
         
-        if equipment == 'G311':
+        if equipment == 'B311':
             key = 'W_' + equipment
             work = df[key][1]
-            print("COST FUNCTION OF COMPRESSORS NOT DEFINED")
-            cost = 0
+            cost = 2.7745 * work**0.7814
 
         # TODO: Apply currency conversion here.
-            
-        print(f"Equipment: {equipment}, Cost: {cost} kEUR")
         return cost
 
     def NOAK_escalation(self, TDC):
@@ -311,14 +318,12 @@ class MEA_plant:
         ownercost_interest = 0.095
         TCR = TPC*(1 + ownercost_interest)
 
-        print("TCR specific", self.specific_annualized(TCR) )
         aCAPEX = TCR/self.annualization
-        print("aCAPEX",aCAPEX)
 
-        # OPEX (non-energy): (Site-TEA-Tharun)
+        # OPEX (non-energy): (Site-TEA-Tharun)¨
         mMEA = self.data["M_MAKEUP"].values[0]      #kg/s
         mMEA = mMEA/1000 * 3600*self.duration       #tMEA/a
-        cost_MEA = mMEA * 1.7                       #kEUR/a TODO: CHECK THIS; IT'S SUPER HIGH???
+        cost_MEA = mMEA * 1.7                       #kEUR/a
 
         mH2O = self.data["M_H2OIN"].values[0]       #kg/s
         mH2O = mH2O/1000 * 3600*self.duration       #tH2O/a
@@ -326,44 +331,8 @@ class MEA_plant:
        
         cost_maintenance = TPC * 0.045              #kEUR/a 
         cost_labor = 411                            #kEUR/a 
-        print(cost_H2O, cost_MEA, cost_maintenance, cost_labor)
-        print(sum([cost_H2O, cost_MEA, cost_maintenance, cost_labor]))
 
-        return aCAPEX
-    
-    def FOAK_escalation(self, TDC, redundancy):
-        # Add +100% redundancy to some equipment:
-        TDC = TDC + redundancy*(1.0)
-
-        # aCAPEX:
-        process_contingency = 0.30
-        TDCPC = TDC*(1 + process_contingency)
-        indirect_costs = 0.25
-        EPC = TDCPC*(1 + indirect_costs)
-        project_contingency = 0.50
-        TPC = EPC*(1 + project_contingency) #Use for OPEX
-        ownercost_interest = 0.095
-        TCR = TPC*(1 + ownercost_interest)
-
-        print("TCR specific", self.specific_annualized(TCR) )
-        aCAPEX = TCR/self.annualization
-        print("aCAPEX",aCAPEX)
-
-        # OPEX (non-energy): (Site-TEA-Tharun)
-        mMEA = self.data["M_MAKEUP"].values[0]      #kg/s
-        mMEA = mMEA/1000 * 3600*self.duration       #tMEA/a
-        cost_MEA = mMEA * 1.7                       #kEUR/a TODO: CHECK THIS; IT'S SUPER HIGH???
-
-        mH2O = self.data["M_H2OIN"].values[0]       #kg/s
-        mH2O = mH2O/1000 * 3600*self.duration       #tH2O/a
-        cost_H2O = mH2O * 0.02/1000                 #kEUR/a 
-       
-        cost_maintenance = TPC * 0.045              #kEUR/a 
-        cost_labor = 411                            #kEUR/a 
-        print(cost_H2O, cost_MEA, cost_maintenance, cost_labor)
-        print(sum([cost_H2O, cost_MEA, cost_maintenance, cost_labor]))
-
-        return aCAPEX
+        return TCR, aCAPEX, cost_H2O, cost_MEA, cost_maintenance, cost_labor
 
     def specific_annualized(self, cost):
         cost = cost/self.annualization              #kEUR,annualized
@@ -384,21 +353,66 @@ class MEA_plant:
 # OC&Interest = 9.5 (15 EBTF, maybe 7 Rubin) site-TEA Tharun/Max
 # Also add redundancy etc.      white paper
 
-MEA = MEA_plant(Aspen_data) #SHOULD BE FUNCTION OF VOLUME FLOW, AND PERCENTAGE
+MEA = MEA_plant(chp, Aspen_data) #SHOULD BE FUNCTION OF VOLUME FLOW, AND PERCENTAGE
 
-TDC = 0
 redundancy = 0
+direct_costs = []
 for equipment in MEA.equipment_list:
     direct_cost = MEA.direct_cost(equipment)
-    TDC += direct_cost
+    direct_costs.append(direct_cost)
 
-    if equipment in ['DCCPUMP','PUMP','G311','FLASH1','FLASH2','DRYFLASH']: #TODO: What components should have redundancy? What %level? Or just apply 1 factor?
+    if equipment in ['DCCPUMP','PUMP','B311','FLASH1','FLASH2','DRYFLASH']: #TODO: What components should have redundancy? What %level? Or just apply 1 factor?
         redundancy += direct_cost
+plt.figure(figsize=(10, 6))
+plt.bar(MEA.equipment_list, direct_costs, color='blue')
+plt.xlabel('Equipment Names')
+plt.ylabel('Direct Costs [kEUR]')
+plt.title('Direct Costs of Equipment Items')
+plt.xticks(rotation=45, ha='right')  
+plt.tight_layout()
+# plt.show()
 
-print(TDC)
-print(redundancy)
-print("TDC specific", MEA.specific_annualized(TDC) )
 
-MEA.NOAK_escalation(TDC)
+# Non-EnergyCosts:
+TDC = sum(direct_costs)
+print(" ")
+print("TotalDirectCost is", TDC)
+print("TDC specific annualized is", MEA.specific_annualized(TDC) )
+TCR, aCAPEX, cost_H2O, cost_MEA, cost_maintenance, cost_labor = MEA.NOAK_escalation(TDC)
 
-MEA.FOAK_escalation(TDC,redundancy)
+# Rough estimate of EnergyCost (site-TEA):
+steam_price = 28.4          #EUR/MWh
+coolingwater_price = 0.02   #EUR/t
+elec_price = 60             #EUR/MWh
+
+Qreb = MEA.data["Q_REBOIL"].values[0] #kW
+Qcool = 0                             #kW
+for cooler in ['B4', 'COOL1', 'COOL2', 'COOL3', 'DCCHX', 'DRYCOOL', 'DUMCOOL']:
+    key = 'Q_' + cooler
+    Qcool += MEA.data[key].values[0] 
+Welc = 0                                #kW
+for pump in ['DCCPUMP', 'PUMP', 'B311']:
+    key = 'W_' + pump
+    Welc += MEA.data[key].values[0]
+
+cost_steam = Qreb/1000 * MEA.duration * steam_price/1000 #kEUR/a
+mcool = -Qcool/(4.18*15) #kg/s assuming cp=4.18kJ/kg and dT=15C)
+cost_coolingwater = mcool/1000 * 3600*MEA.duration * coolingwater_price/1000 #kEUR/a
+cost_elec = Welc/1000 * MEA.duration * elec_price/1000 #kEUR/a
+print(cost_steam, cost_coolingwater, cost_elec)
+print("Promising, because: CostSteam dominates, and is ~= 2*aCAPEX. Also CostWelc is about ~= CostSteam/10 (not counting Compr&Lique), and CostMaintenance is < aCAPEX/2. These general patterns are consistent with Ali, 2019. But MEAmakeup is weirdly high!")
+
+variable_names = ['aCAPEX', 'cost_elec', 'cost_coolingwater', 'cost_steam', 'cost_MEA', 'cost_maintenance', 'cost_labor', 'cost_H2O']
+variable_costs = [aCAPEX, cost_elec, cost_coolingwater, cost_steam, cost_MEA, cost_maintenance, cost_labor, cost_H2O]
+
+# Plotting the bar chart
+plt.figure(figsize=(10, 6))
+plt.bar(variable_names, variable_costs, color='green')
+plt.xlabel('Cost Variables')
+plt.ylabel('Cost (kEUR/a)')
+plt.title('Costs of Different Variables')
+plt.xticks(rotation=45, ha='right')  # Rotate x-axis labels for better readability
+plt.tight_layout()
+
+# Show the plot
+plt.show()
