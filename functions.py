@@ -191,6 +191,7 @@ class MEA_plant:
                                                 # How to integrate low CONC%? 
             
             #cost2024 = cost2015*(CEPCI2024/CEPCI2015), check what is a good year, e.g. 2022? 2024 is a very rough estimate.
+            #Apply exchange rate of the year considered! e.g. to USD (e.g. average of the year)
 
         if equipment in pump_list:
             key = 'VT_' + equipment
@@ -273,3 +274,75 @@ class MEA_plant:
 # Proj cont = 50                white paper
 # OC&Interest = 9.5 (15 EBTF, maybe 7 Rubin) site-TEA Tharun/Max
 # Also add redundancy etc.      white paper
+
+
+def find_ranges(component_data):
+    temperatures = []
+    for component, data in component_data.items():
+        temperatures.extend([data['TIN'], data['TOUT']])
+
+    unique_temperatures = list(dict.fromkeys(temperatures))  # Remove duplicates by converting to dictionary keys and back to list
+    unique_temperatures.sort(reverse=True)
+
+    temperature_ranges = []
+    for i in range(len(unique_temperatures) - 1):
+        temperature_range = (unique_temperatures[i + 1], unique_temperatures[i])
+        temperature_ranges.append(temperature_range)
+
+    return temperature_ranges
+
+def heat_ranges(temperature_ranges, component_data):
+    Qranges = []
+    for temperature_range in temperature_ranges:
+        Ctot = 0
+        for component, data in component_data.items():
+            TIN = data['TIN']
+            TOUT = data['TOUT']
+            Q = data['Q']
+            C = Q/(TIN-TOUT)
+            
+            if TIN >= temperature_range[1] and TOUT <= temperature_range[0]:
+                Ctot += C
+
+        Qrange = Ctot*(temperature_range[1]-temperature_range[0])
+        Qranges.append(Qrange)
+    return Qranges
+
+def composite_curve(temperature_ranges, Qranges, dTmin = 10):
+    plt.figure(figsize=(10, 8))
+    current_q = 0
+    for i, temp_range in enumerate(temperature_ranges):
+        next_q = current_q + Qranges[i]
+
+        plt.plot([current_q, next_q], [temp_range[1], temp_range[0]], marker='o', label=f"Range {i+1}")
+        plt.plot([current_q, next_q], [temp_range[1]-dTmin, temp_range[0]-dTmin], marker='o', label=f"Range {i+1}")
+        current_q = next_q
+
+    # Adding labels and title
+    plt.xlabel('Q')
+    plt.ylabel('Temperature [C]')
+    plt.title('Cold Composite Curve')
+    plt.legend()
+    plt.grid(True)
+    plt.show()
+
+def available_heat(temperature_ranges, Qranges, Tmax, Tsupp, Thigh, Tlow, dTmin=10):
+    # Compares the real DH temperatures with the shifted (dTmin) composite curve temperatures
+    current_q = 0
+    Qinteresting = []
+    for i, temp_range in enumerate(temperature_ranges): #IM IN ONE RANGE
+        
+        next_q = current_q + Qranges[i]  
+        for Tinteresting in [Tmax, Tsupp, Thigh, Tlow]: # I look for all temps in each range
+            if temp_range[0]-dTmin <= Tinteresting <= temp_range[1]-dTmin:
+                q_value = current_q + (Tinteresting - (temp_range[1]-dTmin))*(next_q - current_q)/(temp_range[0] - temp_range[1])
+                Qinteresting.append(q_value)
+                print("Q, T", q_value,Tinteresting)
+        current_q = next_q
+
+    Q_highgrade = Qinteresting[2]-Qinteresting[0] # dT are given by our assumptions! Composite curve has (120+10)C->(61+10)C , DH has 61C->86C
+    Q_lowgrade  = Qinteresting[3]-Qinteresting[2]
+    Q_cw = current_q - Qinteresting[3]
+
+    print(Q_highgrade,Q_lowgrade,Q_cw)
+    return Q_highgrade, Q_lowgrade, Q_cw

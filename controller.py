@@ -62,39 +62,42 @@ chp.P = chp.P/1000
 chp.Qdh = mB*(B.h-C.h)/1000
 
 chp.print_info()
-chp.plot_plant()
-chp.plot_plant(capture_states=[a,d])
+# chp.plot_plant()
+# chp.plot_plant(capture_states=[a,d])
+
+
+# HEAT INTEGRATION WORK BELOW
+components = ['B4', 'COOL1', 'COOL2', 'COOL3', 'DCCHX', 'DRYCOOL', 'DUMCOOL']
+
+# Get the stream data of components
+component_data = {}
+for component in components:
+    component_data[component] = {
+        'Q': -Aspen_data[f"Q_{component}"].values[0],
+        'TIN': Aspen_data[f"TIN_{component}"].values[0],
+        'TOUT': Aspen_data[f"TOUT_{component}"].values[0]
+    }
+
+temperature_ranges = find_ranges(component_data)
+Qranges = heat_ranges(temperature_ranges, component_data)
+
+# Assume DH temperature levels
+Tsupp = 86
+Thigh = 61
+Tlow = 47
+Tmax = 120 # Get from MEAmodel?
+Q_highgrade, Q_lowgrade, Q_cw = available_heat(temperature_ranges, Qranges, Tmax, Tsupp, Thigh, Tlow, dTmin=5) #TODO: Harness Q_cw using heatpump?
+composite_curve(temperature_ranges, Qranges, dTmin=5)
+
+
+
+
+plt.show()
 
 
 
 
 
-
-
-
-
-# # HEAT INTEGRATION WORK BELOW
-# # List of components
-# components = ['B4', 'COOL1', 'COOL2', 'COOL3', 'DCCHX', 'DRYCOOL', 'DUMCOOL']
-
-# # Given points for each component
-# Q_values = [-Aspen_data[f"Q_{component}"].values[0] for component in components]
-# TIN_values = [Aspen_data[f"TIN_{component}"].values[0] for component in components]
-# TOUT_values = [Aspen_data[f"TOUT_{component}"].values[0] for component in components]
-
-# # Plotting lines for each component
-# plt.figure(figsize=(10, 8))
-# for i in range(len(components)):
-#     plt.plot([0, Q_values[i]], [TIN_values[i], TOUT_values[i]], marker='o', label=components[i])
-
-# # Adding labels and title
-# plt.xlabel('Q')
-# plt.ylabel('Temperature (T)')
-# plt.title('Streams to be cooled')
-# plt.legend()
-
-# Show the plot
-# plt.show()
 
 # Aspen_data = MEA.linearReg(Aspen_data) #This is ok and can happen, but some things (e.g. Acool1) should not be used
 # ebalance = MEA.Ebalance(Aspen_data,chp)
