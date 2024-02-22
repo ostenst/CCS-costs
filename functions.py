@@ -189,6 +189,8 @@ class MEA_plant:
             area = df[key][1]
             cost = 2.8626 * area**0.7988        #EUR2015 convert with CEPCI, AVOIDED COST REQUIRES GRID EMISSIONS (Scope2), TRANPOSRT=0 for now (Scope3, storage, leakage)
                                                 # How to integrate low CONC%? 
+            
+            #cost2024 = cost2015*(CEPCI2024/CEPCI2015), check what is a good year, e.g. 2022? 2024 is a very rough estimate.
 
         if equipment in pump_list:
             key = 'VT_' + equipment

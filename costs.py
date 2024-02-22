@@ -234,6 +234,8 @@ df = pd.read_csv("MEA_testdata.csv", sep=";", header=None, index_col=0) #TODO: C
 Aspen_data = df.transpose()
 print(Aspen_data)
 
+costs_of_evryething=f(Aspen_data)
+
 class MEA_plant:
     def __init__(self, host_plant, Aspen_data, construction_year=2024, currency_factor=0, discount=0.08, lifetime=25):
         self.host = host_plant
@@ -269,7 +271,8 @@ class MEA_plant:
         if equipment in HEX_list:                               #TODO: Calculate Areas in E-BALANCE function first! Where HEATPUMPS can be installed for full recovery, but (later, PaperIII) be operated flexibly.
             key = 'A_' + equipment
             area = df[key][1]
-            cost = 2.8626 * area**0.7988
+            cost = 2.8626 * area**0.7988        #EUR2015 convert with CEPCI, AVOIDED COST REQUIRES GRID EMISSIONS (Scope2), TRANPOSRT=0 for now (Scope3, storage, leakage)
+                                                # How to integrate low CONC%? 
 
         if equipment in pump_list:
             key = 'VT_' + equipment
@@ -308,6 +311,7 @@ class MEA_plant:
         return cost
 
     def NOAK_escalation(self, TDC):
+        # Adding sstartup-material! 8 % of total material required, scale by CO2 t/h (check the whitepaper)
         # aCAPEX:
         process_contingency = 0.15
         TDCPC = TDC*(1 + process_contingency)
@@ -384,6 +388,9 @@ TCR, aCAPEX, cost_H2O, cost_MEA, cost_maintenance, cost_labor = MEA.NOAK_escalat
 steam_price = 28.4          #EUR/MWh
 coolingwater_price = 0.02   #EUR/t
 elec_price = 60             #EUR/MWh
+elec_CO2 = 0                # FOR INDUSTRIES!
+
+steam_CO2 = 0
 
 Qreb = MEA.data["Q_REBOIL"].values[0] #kW
 Qcool = 0                             #kW

@@ -19,21 +19,11 @@ plant_data = {
     "Heat output (MWheat)": [126],
     "Electric output (MWe)": [45],
     "Existing FGC heat output (MWheat)": [38],
-    "Year of commissioning": [1995],            #Select the DH system here somehow. Dont care about year. #DH average temp is 47C return and 86C supply
+    "Year of commissioning": [1995],            #Select the DH system here somehow. Dont care about year. #DH average temp is 47C return and 86C supply #Renova: 39,8C => 98,1C
     "Live steam temperature (degC)": [400],
     "Live steam pressure (bar)": [40]
 }
-# plant_data = {
-#     "City": ["Stockholm (South)"],
-#     "Plant Name": ["Värtaverket KVV 8"],
-#     "Fuel (W=waste, B=biomass)": ["B"],
-#     "Heat output (MWheat)": [215],
-#     "Electric output (MWe)": [130],
-#     "Existing FGC heat output (MWheat)": [90],
-#     "Year of commissioning": [2016],
-#     "Live steam temperature (degC)": [560],
-#     "Live steam pressure (bar)": [140]
-# }
+
 plant_data = pd.DataFrame(plant_data)           #Each input plant will be a row in a dataframe
 x = plant_data.iloc[0]
 MEA_data = pd.read_csv("MEA_testdata.csv", sep=";", header=None, index_col=0) #TODO: Consider storing in dict, superfast!
@@ -51,13 +41,12 @@ chp = CHP(
 )
 chp.estimate_performance(plotting=False)
 chp.print_info()
-# chp.plot_plant()
 
 # SIZE A MEA RETROFIT GIVEN THE HOST PLANT AND ASPEN RUNS
 MEA = MEA_plant(chp, Aspen_data) #should be f(volumeflow,%CO2)
-# print(Aspen_data)
+# MEA.linear_regression_of_thermodynamic_sizes()
 
-# Find nominal Ebalance
+# FIND NOMINAL ENERGY BALANCE
 A,B,C,D = chp.states
 mtot = chp.Qfuel*1000 / (A.h-C.h)
 TCCS = MEA.data["T_REBOIL"].values[0] + 10 #Assuming dTmin = 10 in reboiler
@@ -68,20 +57,19 @@ a = State("a",pCCS,s=A.s,mix=True) #If mixed! You need to add a case if we are o
 d = State("d",pCCS,satL=True)
 mCCS = MEA.data["Q_REBOIL"].values[0] / (a.h-d.h)
 mB = mtot-mCCS
-print(mtot)
-print(mCCS)
-chp.P = mtot*(A.h-a.h) + mB*(a.h-B.h)
-print("Power, ", chp.P)
 chp.P = mtot*(A.h-a.h) + mB*(a.h-B.h) - (MEA.data["W_B311"].values[0]+100)
-print("Power, ",chp.P)
+chp.P = chp.P/1000
+chp.Qdh = mB*(B.h-C.h)/1000
 
-print("Q", chp.Qdh*1000)
-chp.Qdh = mB*(B.h-C.h)
-print("Q", chp.Qdh)
-print("Qfgc", chp.Qfgc*1000)
-
-
+chp.print_info()
+chp.plot_plant()
 chp.plot_plant(capture_states=[a,d])
+
+
+
+
+
+
 
 
 
@@ -115,9 +103,6 @@ chp.plot_plant(capture_states=[a,d])
 # for equipment in MEA.equipment_list:
 #     direct_cost = MEA.direct_cost(equipment)
 #     direct_costs.append(direct_cost)
-
-
-
 
 
 # plt.figure(figsize=(10, 6))
