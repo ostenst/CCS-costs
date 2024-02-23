@@ -41,61 +41,55 @@ chp = CHP(
 )
 chp.estimate_performance(plotting=False)
 chp.print_info()
+MEA = MEA_plant(chp, Aspen_data) #should be f(volumeflow,%CO2)... maybe like this: MEA_plant(host=chp, constr_year, currency, discount, lifetime)
+# MEA.extract_data(Aspen_data)
 
-# SIZE A MEA RETROFIT GIVEN THE HOST PLANT AND ASPEN RUNS
-MEA = MEA_plant(chp, Aspen_data) #should be f(volumeflow,%CO2)
-# MEA.linear_regression_of_thermodynamic_sizes()
-
-# FIND NOMINAL ENERGY BALANCE
-A,B,C,D = chp.states
-mtot = chp.Qfuel*1000 / (A.h-C.h)
-TCCS = MEA.data["T_REBOIL"].values[0] + 10 #Assuming dTmin = 10 in reboiler
-pCCS = steamTable.psat_t(TCCS)
-Ta = steamTable.t_ps(pCCS,A.s)
-
-a = State("a",pCCS,s=A.s,mix=True) #If mixed! You need to add a case if we are outside (in gas phase)
-d = State("d",pCCS,satL=True)
-mCCS = MEA.data["Q_REBOIL"].values[0] / (a.h-d.h)
-mB = mtot-mCCS
-chp.P = mtot*(A.h-a.h) + mB*(a.h-B.h) - (MEA.data["W_B311"].values[0]+100)
-chp.P = chp.P/1000
-chp.Qdh = mB*(B.h-C.h)/1000
-
+# RDM MODEL SHOULD MAYBE START HERE? No... or well it should be before we assign discountrates etc. But maybe after extracting Aspen_data!
+Plost, Qlost, reboiler_steam = chp.energy_penalty(MEA)
+print(Plost, Qlost)
 chp.print_info()
-# chp.plot_plant()
-# chp.plot_plant(capture_states=[a,d])
+
+chp.plot_plant()
+chp.plot_plant(capture_states=reboiler_steam)
 
 
 # HEAT INTEGRATION WORK BELOW
-components = ['B4', 'COOL1', 'COOL2', 'COOL3', 'DCCHX', 'DRYCOOL', 'DUMCOOL']
+components = ['B4', 'COOL1', 'COOL2', 'COOL3', 'DRYCOOL', 'DUMCOOL'] #Optional: add 'DCCHX'
 
 # Get the stream data of components
 component_data = {}
 for component in components:
     component_data[component] = {
-        'Q': -Aspen_data[f"Q_{component}"].values[0],
-        'TIN': Aspen_data[f"TIN_{component}"].values[0],
-        'TOUT': Aspen_data[f"TOUT_{component}"].values[0]
+        'Q': -MEA.get(f"Q_{component}"),
+        'TIN': MEA.get(f"TIN_{component}"),
+        'TOUT': MEA.get(f"TOUT_{component}")
     }
+plot_streams(component_data)
 
 temperature_ranges = find_ranges(component_data)
 Qranges = heat_ranges(temperature_ranges, component_data)
 
 # Assume DH temperature levels
 Tsupp = 86
-Thigh = 61
+Thigh = 61 # TODO: Maybe just defined this as Tsupp+Tlow/2 ? Easier to motivate, and in-line with DH archetypes
 Tlow = 47
-Tmax = 120 # Get from MEAmodel?
-Q_highgrade, Q_lowgrade, Q_cw = available_heat(temperature_ranges, Qranges, Tmax, Tsupp, Thigh, Tlow, dTmin=5) #TODO: Harness Q_cw using heatpump?
-composite_curve(temperature_ranges, Qranges, dTmin=5)
+Tmax = 130 # Get from MEAmodel? It's the maximum temp. where streams are allowed to give off heat.
+dTmin = 10
 
+Qhighgrade, Qlowgrade, Qcw, Tend = available_heat(temperature_ranges, Qranges, Tmax, Tsupp, Thigh, Tlow, dTmin=dTmin) #TODO: Harness Q_cw using heatpump?
+plot_composite(temperature_ranges, Qranges, Tmax, Tsupp, Thigh, Tlow, dTmin=dTmin)
 
+# But what is the cost of this heat exchange? Find areas!
+U = 1 #kW/m2K, (Deng compr study)
+Alow, Ahigh, Acw = exchanger_areas(Qhighgrade, Qlowgrade, Qcw, U, dTmin, Tmax, Tsupp, Tlow, Tend)
+print("I believe in these areas, but they are dissimilar from Aspen: ", Ahigh, Alow, Acw)
 
+# Integrate the HEXs
+Qdh, mcoolingwater = chp.heat_integrate(Qhighgrade, Qlowgrade, Qcw)
+print(Qdh, mcoolingwater)
+chp.print_info()
 
 plt.show()
-
-
-
 
 
 

@@ -108,7 +108,7 @@ class CHP:
         else:
             raise ValueError("One or more of the variables (msteam, Pestimated, Qfuel, pcond_guess, mCO2, Vfg) is not positive.")
 
-    def plot_plant(self, capture_states=None):
+    def plot_plant(self, capture_states=None, show=False):
         A,B,C,D = self.states
         T_start = 0.01
         T_end = 373.14
@@ -149,13 +149,42 @@ class CHP:
             d.plot()
             draw_line(a, d, color='cornflowerblue')
 
-        plt.show()
+        if show:
+            plt.show()
         return
+    
+    def energy_penalty(self, MEA):
+        A,B,C,D = self.states
+        mtot = self.Qfuel*1000 / (A.h-C.h)
+        TCCS = MEA.get("T_REBOIL") + 10 #Assuming dTmin = 10 in reboiler MEA.get
+        pCCS = steamTable.psat_t(TCCS)
+        Ta = steamTable.t_ps(pCCS,A.s)
+
+        a = State("a",pCCS,s=A.s,mix=True) #NOTE: Debug? If mixed! You need to add a case if we are outside (in gas phase)
+        d = State("d",pCCS,satL=True)
+        mCCS = MEA.get("Q_REBOIL") / (a.h-d.h)
+        mB = mtot-mCCS
+
+        Pnew = mtot*(A.h-a.h) + mB*(a.h-B.h) - (MEA.get("W_B311")+100) #100 is approximate work of pumps etc., consider better detail!
+        Plost = self.P - Pnew/1000
+        self.P = Pnew/1000
+
+        Qnew = mB*(B.h-C.h)/1000
+        Qlost = self.Qdh - Qnew
+        self.Qdh = Qnew
+
+        reboiler_steam = [a,d]
+        return Plost, Qlost, reboiler_steam
+    
+    def heat_integrate(self, Qhighgrade, Qlowgrade, Qcw):
+        self.Qdh += (Qhighgrade + Qlowgrade)/1000
+        mcoolingwater = Qcw/(4.18*(20-15)) # Assuming cw properties, TODO: mcoolingwater is very high!? But the heat capacity Qcw seems reasonable.
+        return self.Qdh, mcoolingwater
 
 class MEA_plant:
     def __init__(self, host_plant, Aspen_data, construction_year=2024, currency_factor=0, discount=0.08, lifetime=25):
         self.host = host_plant
-        self.data = Aspen_data
+        self.data = Aspen_data #self.data should point to the individual plant data, not the total Aspen_data
         self.mfluegas = Aspen_data["M_FLUEGAS"].values[0]
         self.rhofluegas = Aspen_data["RHO_FLUEGAS"].values[0]
         #self.data_sized = None THIS IS THE DATAFRAME THAT SHOULD BE SENT TO direct_cost
@@ -174,6 +203,9 @@ class MEA_plant:
     # def linearRegression(Aspen_data):
         # TODO: MAKE PROPER MEA_TESTDATA FIRST
         # return SIZES
+
+    def get(self, parameter):
+        return self.data[parameter].values[0]
 
     def direct_cost(self, equipment): 
         #TODO: Double check these, also compressor function?
@@ -243,11 +275,11 @@ class MEA_plant:
         aCAPEX = TCR/self.annualization
 
         # OPEX (non-energy): (Site-TEA-Tharun)¨
-        mMEA = self.data["M_MAKEUP"].values[0]      #kg/s
+        mMEA = self.get("M_MAKEUP")      #kg/s
         mMEA = mMEA/1000 * 3600*self.duration       #tMEA/a
         cost_MEA = mMEA * 1.7                       #kEUR/a
 
-        mH2O = self.data["M_H2OIN"].values[0]       #kg/s
+        mH2O = self.get("M_H2OIN")       #kg/s
         mH2O = mH2O/1000 * 3600*self.duration       #tH2O/a
         cost_H2O = mH2O * 0.02/1000                 #kEUR/a 
        
@@ -258,7 +290,7 @@ class MEA_plant:
 
     def specific_annualized(self, cost):
         cost = cost/self.annualization              #kEUR,annualized
-        mCO2 = self.data["MCO2_CO2OUT"].values[0]   #kgCO2/s
+        mCO2 = self.get("MCO2_CO2OUT")              #kgCO2/s
         mCO2 = mCO2/1000 * 3600*self.duration       #tCO2/a
         cost_specific = cost/mCO2 * 1000            #EUR/tCO2
         return cost_specific
@@ -308,26 +340,77 @@ def heat_ranges(temperature_ranges, component_data):
         Qranges.append(Qrange)
     return Qranges
 
-def composite_curve(temperature_ranges, Qranges, dTmin = 10):
+def plot_streams(component_data, show=False):
     plt.figure(figsize=(10, 8))
+    base_red = 250 / 255  # Base intensity of red
+
+    for i, (component, data) in enumerate(component_data.items()):
+        Q = data['Q']
+        TIN = data['TIN']
+        TOUT = data['TOUT']
+
+        # Adjusting the intensity of red for each line
+        red_intensity = base_red - i * 0.05  # You can adjust the step size as needed
+
+        # Setting the color with adjusted red intensity
+        color = (red_intensity, 0, 0)
+
+        plt.plot([0, Q], [TIN, TOUT], marker='o', color=color, label=component)
+
+    # Adding labels and title
+    plt.xlabel('Q [kW]')
+    plt.ylabel('Temperature [C]')
+    plt.title('Streams To Cool')
+    plt.legend()
+    plt.grid(True)
+    if show:
+        plt.show()
+
+def plot_composite(temperature_ranges, Qranges, Tmax, Tsupp, Thigh, Tlow, dTmin=10, show=False):
+    plt.figure(figsize=(10, 8))
+    Tmax = Tmax - dTmin
     current_q = 0
+    Qinteresting = []
     for i, temp_range in enumerate(temperature_ranges):
         next_q = current_q + Qranges[i]
 
-        plt.plot([current_q, next_q], [temp_range[1], temp_range[0]], marker='o', label=f"Range {i+1}")
-        plt.plot([current_q, next_q], [temp_range[1]-dTmin, temp_range[0]-dTmin], marker='o', label=f"Range {i+1}")
+        for Tinteresting in [Tmax, Tsupp, Thigh, Tlow]: # I look for all temps in each range
+            if temp_range[0]-dTmin <= Tinteresting <= temp_range[1]-dTmin:
+                q_value = current_q + (Tinteresting - (temp_range[1]-dTmin))*(next_q - current_q)/(temp_range[0] - temp_range[1])
+                Qinteresting.append(q_value)
+
+        labels = ["Treal","Tshifted"] if i == 0 else [None, None]  
+        plt.plot([current_q, next_q], [temp_range[1], temp_range[0]], marker='o', color='#FF0000', label=labels[0])
+        plt.plot([current_q, next_q], [temp_range[1]-dTmin, temp_range[0]-dTmin], color='#FA8072', marker='o', label=labels[1])
         current_q = next_q
 
+    # Plot heat sinks
+    plt.plot([Qinteresting[0], Qinteresting[2]], [Tsupp, Thigh], marker='o', color='#0000FF', label='DH high-grade')
+    plt.plot([Qinteresting[2], Qinteresting[3]], [Thigh, Tlow], marker='o', color='#069AF3', label='DH low-grade')
+    plt.plot([Qinteresting[3], current_q], [20, 15], marker='o', color='#0000FF', label='Cooling water') # NOTE: hard-coded CW temps.
+
+    # Annotate interesting info
+    Q_highgrade = Qinteresting[2]-Qinteresting[0] # dT are given by our assumptions! Composite curve has (120+10)C->(61+10)C , DH has 61C->86C
+    Q_lowgrade  = Qinteresting[3]-Qinteresting[2]
+    Q_cw = current_q - Qinteresting[3]
+    plt.text(26000, 70, f'dTmin={dTmin}', color='black', fontsize=12, ha='center', va='center')
+    plt.text(6000, 70, f'Qhighgrade={round(Q_highgrade/1000)} MW', color='#0000FF', fontsize=12, ha='center', va='center')
+    plt.text(14000, 52, f'Qlowgrade={round(Q_lowgrade/1000)} MW', color='#069AF3', fontsize=12, ha='center', va='center')
+    plt.text(16000, 20, f'Qcoolingwater={round(Q_cw/1000)} MW', color='#0000FF', fontsize=12, ha='center', va='center')
+
     # Adding labels and title
-    plt.xlabel('Q')
+    plt.xlabel('Q [kW]')
     plt.ylabel('Temperature [C]')
-    plt.title('Cold Composite Curve')
+    plt.title('Hot Composite Curve vs Cold Utilities')
     plt.legend()
     plt.grid(True)
-    plt.show()
+    if show:
+        plt.show()
 
 def available_heat(temperature_ranges, Qranges, Tmax, Tsupp, Thigh, Tlow, dTmin=10):
-    # Compares the real DH temperatures with the shifted (dTmin) composite curve temperatures
+    # Looks for the real DH temperatures, at the shifted (dTmin) composite curve
+    # NOTE: this assumes heat exchange is possible between Tmax and Thigh, ensure this is true.
+    Tmax = Tmax - dTmin # This temp. belongs to the composite curve and should be shifted. Should be ok now!
     current_q = 0
     Qinteresting = []
     for i, temp_range in enumerate(temperature_ranges): #IM IN ONE RANGE
@@ -337,12 +420,25 @@ def available_heat(temperature_ranges, Qranges, Tmax, Tsupp, Thigh, Tlow, dTmin=
             if temp_range[0]-dTmin <= Tinteresting <= temp_range[1]-dTmin:
                 q_value = current_q + (Tinteresting - (temp_range[1]-dTmin))*(next_q - current_q)/(temp_range[0] - temp_range[1])
                 Qinteresting.append(q_value)
-                print("Q, T", q_value,Tinteresting)
         current_q = next_q
+    Tend = temp_range[0] 
 
     Q_highgrade = Qinteresting[2]-Qinteresting[0] # dT are given by our assumptions! Composite curve has (120+10)C->(61+10)C , DH has 61C->86C
     Q_lowgrade  = Qinteresting[3]-Qinteresting[2]
     Q_cw = current_q - Qinteresting[3]
 
-    print(Q_highgrade,Q_lowgrade,Q_cw)
-    return Q_highgrade, Q_lowgrade, Q_cw
+    return Q_highgrade, Q_lowgrade, Q_cw, Tend
+
+def exchanger_areas(Qhighgrade, Qlowgrade, Qcw, U, dTmin, Tmax, Tsupp, Tlow, Tend):
+    Alow = Qlowgrade/(U*dTmin) #Constant, see composite curve
+
+    dT1 = Tmax - Tsupp
+    dT2 = dTmin
+    dTlm = (dT1-dT2)/math.log(dT1/dT2)
+    Ahigh = Qhighgrade/(U*dTlm)
+
+    dT1 = (Tlow+dTmin) - 20         # ASSUMING CW of 15C->20C
+    dT2 = Tend - 15
+    dTlm = (dT1-dT2)/math.log(dT1/dT2)
+    Acw = Qcw/(U*dTlm)
+    return Alow, Ahigh, Acw
