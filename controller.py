@@ -74,7 +74,7 @@ Tsupp = 86
 Thigh = 61 # TODO: Maybe just defined this as Tsupp+Tlow/2 ? Easier to motivate, and in-line with DH archetypes
 Tlow = 47
 Tmax = 130 # Get from MEAmodel? It's the maximum temp. where streams are allowed to give off heat.
-dTmin = 10
+dTmin = 5
 
 Qhighgrade, Qlowgrade, Qcw, Tend = available_heat(temperature_ranges, Qranges, Tmax, Tsupp, Thigh, Tlow, dTmin=dTmin) #TODO: Harness Q_cw using heatpump?
 plot_composite(temperature_ranges, Qranges, Tmax, Tsupp, Thigh, Tlow, dTmin=dTmin)
@@ -91,6 +91,42 @@ chp.print_info()
 
 plt.show()
 
+
+# ## EXAMPLE OF HOW TO MOVE FROM DATA TO INTERPOLATED VALUES
+# import pandas as pd
+# from sklearn.multioutput import MultiOutputRegressor
+# from sklearn.linear_model import LinearRegression
+
+# # Example DataFrame for input data
+# data = {'x1': [1, 2, 3, 4, 5],
+#         'x2': [2, 3, 4, 5, 6]}
+# df = pd.DataFrame(data)
+
+# # Example DataFrame for output data
+# output_data = {'y1': [10, 20, 30, 40, 50],
+#                'y2': [15, 25, 35, 45, 55]}
+# output_df = pd.DataFrame(output_data)
+
+# # Create X and y from DataFrames
+# X = df.values
+# y = output_df.values
+
+# # Create a multi-output regression model using linear regression as the base regressor
+# model = MultiOutputRegressor(LinearRegression())
+
+# # Fit the model
+# model.fit(X, y, feature_names_in_=True)
+
+# # Predict new output given new values of x1 and x2
+# new_data = pd.DataFrame({'x1': [3.5], 'x2': [6]})  # New data point
+# predicted_y = model.predict(new_data)
+
+# # Convert predicted_y to a DataFrame with appropriate column names
+# predicted_df = pd.DataFrame(predicted_y, columns=output_df.columns)
+
+# # Now you can access predicted values by column names
+# interesting_output = predicted_df['y1']
+# print(interesting_output)
 
 
 # Aspen_data = MEA.linearReg(Aspen_data) #This is ok and can happen, but some things (e.g. Acool1) should not be used

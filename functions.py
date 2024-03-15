@@ -350,7 +350,7 @@ def plot_streams(component_data, show=False):
         TOUT = data['TOUT']
 
         # Adjusting the intensity of red for each line
-        red_intensity = base_red - i * 0.05  # You can adjust the step size as needed
+        red_intensity = base_red - i * 0.1  # You can adjust the step size as needed
 
         # Setting the color with adjusted red intensity
         color = (red_intensity, 0, 0)
