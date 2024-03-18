@@ -1,28 +1,32 @@
 import pandas as pd
-import matplotlib.pyplot as plt
 from sklearn.multioutput import MultiOutputRegressor
 from sklearn.linear_model import LinearRegression
+import matplotlib.pyplot as plt
 
 # Read the CSV file
-df = pd.read_csv("W2E.csv", sep=";", decimal=',')  # Replace "your_data.csv" with the path to your CSV file
+df = pd.read_csv("W2E.csv", sep=";", decimal=',')
 
+print(df.head())
+# Define input and output columns
 data_columns = ['CO2%', 'Flow']  # Replace with your input column names
-output_columns = list(df.columns.difference(data_columns)) # Everything else is an output value!
+output_columns = list(df.columns.difference(data_columns))  # Everything else is an output value!
 
+# Separate input and output data
 data = df[data_columns]
 output_data = df[output_columns]
 
-
-### Create X and y from DataFrames
+# Create X and y from DataFrames
 X = data.values
 y = output_data.values
 
 # Create a multi-output regression model using linear regression as the base regressor
 model = MultiOutputRegressor(LinearRegression())
+
+# Fit the model
 model.fit(X, y)
 
 # Predict new output given new values of CO2% and Flow
-new_data = pd.DataFrame({'CO2%': [11], 'Flow': [109]})  # New data point
+new_data = pd.DataFrame({'CO2%': [11], 'Flow': [100]})  # New data point
 predicted_y = model.predict(new_data)
 
 # Convert predicted_y to a DataFrame with appropriate column names
@@ -49,9 +53,9 @@ for output_column in columns_to_plot:
     plt.scatter(new_data["Flow"], predicted_df[output_column], color='red')
 
 # Set labels and title
-plt.xlabel('Flue gas flow [kg/s] (Renova@109kg/s)')
+plt.xlabel('Flue gas flow [kg/s]')
 plt.ylabel('Output Value')
-plt.title('W2E(11 percent CO2) results vs Flow')
+plt.title('W2E results MEA vs flow')
 
 # Add legend
 plt.legend()
