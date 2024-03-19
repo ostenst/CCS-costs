@@ -1,64 +1,48 @@
-import pandas as pd
-from sklearn.multioutput import MultiOutputRegressor
-from sklearn.linear_model import LinearRegression
-import matplotlib.pyplot as plt
+def find_points_on_curve(curve, x_values):
+    """
+    Find the y-values on the curve corresponding to specific x-values.
 
-# Read the CSV file
-df = pd.read_csv("W2E.csv", sep=";", decimal=',')
+    Parameters:
+        curve (list): List of points representing the curve in the form [[x1, y1], [x2, y2], ...].
+        x_values (list): List of x-values for which to find the corresponding y-values.
 
-print(df.head())
-# Define input and output columns
-data_columns = ['CO2%', 'Flow']  # Replace with your input column names
-output_columns = list(df.columns.difference(data_columns))  # Everything else is an output value!
+    Returns:
+        dict: A dictionary containing the x-values as keys and their corresponding y-values as values.
+    """
+    points = {}
+    for x_target in x_values:
+        # Find the two closest points on the curve to the specified x-value
+        closest_points = sorted(curve, key=lambda point: abs(point[0] - x_target))[:2]
+        # Perform linear interpolation to find the y-value corresponding to the x-value
+        x1, y1 = closest_points[0]
+        x2, y2 = closest_points[1]
+        y_value = y1 + (y2 - y1) * (x_target - x1) / (x2 - x1)
+        # Add the interpolated y-value to the dictionary
+        points[x_target] = y_value
+    return points
 
-# Separate input and output data
-data = df[data_columns]
-output_data = df[output_columns]
+# Define your curve as a list of points [(x, y)]
+curve = [
+    [10, 25],
+    [9, 22],
+    [8, 18],
+    [7, 15],
+    [6, 12],
+    [5, 10],
+    [4, 8],
+    [3, 6],
+    [2, 4],
+    [1, 2]
+]
 
-# Create X and y from DataFrames
-X = data.values
-y = output_data.values
+# Define the x-values for which to find the corresponding y-values
+x_low = 3.2
+x_high = 8.8
+x_values = [x_low, x_high]
 
-# Create a multi-output regression model using linear regression as the base regressor
-model = MultiOutputRegressor(LinearRegression())
+# Find the y-values corresponding to the specified x-values
+points = find_points_on_curve(curve, x_values)
 
-# Fit the model
-model.fit(X, y)
-
-# Predict new output given new values of CO2% and Flow
-new_data = pd.DataFrame({'CO2%': [11], 'Flow': [100]})  # New data point
-predicted_y = model.predict(new_data)
-
-# Convert predicted_y to a DataFrame with appropriate column names
-predicted_df = pd.DataFrame(predicted_y, columns=output_data.columns)
-
-# Now you can access predicted values by column names
-interesting_output = predicted_df['Qreb']
-print(interesting_output)
-
-# Display the first few rows of data and output_data
-print("Input data:")
-print(data.head())
-print("\nOutput data:")
-print(output_data.head())
-
-# Make a line plot by plotting output data against "Flow". Make a separate line for each of these outputs: Qreb, Qwash, Tinwash, Qtoabs, Tintoabs, Qliq, COP
-
-# Specify the columns to plot
-columns_to_plot = ['Qreb', 'Qwash', 'Tinwash', 'Qtoabs', 'Tintoabs', 'Qliq', 'COP']
-
-# Make a line plot for each specified output column against "Flow"
-for output_column in columns_to_plot:
-    plt.plot(df['Flow'], df[output_column], label=output_column)
-    plt.scatter(new_data["Flow"], predicted_df[output_column], color='red')
-
-# Set labels and title
-plt.xlabel('Flue gas flow [kg/s]')
-plt.ylabel('Output Value')
-plt.title('W2E results MEA vs flow')
-
-# Add legend
-plt.legend()
-
-# Show plot
-plt.show()
+# Print the result
+for x_value, y_value in points.items():
+    print(f"For x = {x_value}, y = {y_value:.2f}")

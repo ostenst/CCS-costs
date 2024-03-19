@@ -12,67 +12,66 @@ from functions import *
 import warnings
 
 # DEFINE MY INPUT DATA
-steamTable = XSteam(XSteam.UNIT_SYSTEM_MKS)
-plant_data = {
-    "City": ["Göteborg"],
-    "Plant Name": ["Renova"],
-    "Fuel (W=waste, B=biomass)": ["W"],
-    "Heat output (MWheat)": [126],
-    "Electric output (MWe)": [45],
-    "Existing FGC heat output (MWheat)": [38],
-    "Year of commissioning": [1995],            #Select the DH system here somehow. Dont care about year. #DH average temp is 47C return and 86C supply #Renova: 39,8C => 98,1C
-    "Live steam temperature (degC)": [400],
-    "Live steam pressure (bar)": [40]
-}
-
-plant_data = pd.DataFrame(plant_data)           #Each input plant will be a row in a dataframe
-x = plant_data.iloc[0]
-MEA_data = pd.read_csv("MEA_testdata.csv", sep=";", header=None, index_col=0) #TODO: Consider storing in dict, superfast!
 W2E_data = pd.read_csv("W2E.csv", sep=";", decimal=',')  # Replace "your_data.csv" with the path to your CSV file
-Aspen_data = MEA_data.transpose()
+plant_data = pd.read_csv("plant_data.csv", sep=";", decimal=',')
+# x = plant_data.iloc[0]
+print(plant_data.head())
 
-# INITIALIZE AND EVALUATE THE CHP
-chp = CHP(
-    Name=x["Plant Name"],
-    Fuel=x["Fuel (W=waste, B=biomass)"],
-    Qdh=x["Heat output (MWheat)"],
-    P=x["Electric output (MWe)"],
-    Qfgc=x["Existing FGC heat output (MWheat)"],
-    Tsteam=x["Live steam temperature (degC)"],
-    psteam=x["Live steam pressure (bar)"]
-)
-chp.estimate_performance(plotting=False)
-chp.print_info()
-MEA = MEA_plant(chp) #should be f(volumeflow,%CO2)... maybe like this: MEA_plant(host=chp, constr_year, currency, discount, lifetime)
-MEA.estimate_size(W2E_data)
+for index, row in plant_data.iterrows():
+    # INITIALIZE AND EVALUATE THE CHP
+    chp = CHP(
+        Name=row["Plant Name"],
+        Fuel=row["Fuel (W=waste, B=biomass)"],
+        Qdh=float(row["Heat output (MWheat)"]),
+        P=float(row["Electric output (MWe)"]),
+        Qfgc=float(row["Existing FGC heat output (MWheat)"]),
+        Tsteam=float(row["Live steam temperature (degC)"]),
+        psteam=float(row["Live steam pressure (bar)"])
+    )
+    chp.estimate_performance(plotting=False)
+    chp.print_info()
+    MEA = MEA_plant(chp) #should be f(volumeflow,%CO2)... maybe like this: MEA_plant(host=chp, constr_year, currency, discount, lifetime)
+    MEA.estimate_size(W2E_data)
+    print(MEA.data["Qdry"])
 
-# RDM MODEL SHOULD MAYBE START HERE? No... or well it should be before we assign discountrates etc. But maybe after extracting Aspen_data!
-Plost, Qlost, reboiler_steam = chp.energy_penalty(MEA)
-print(Plost, Qlost)
-chp.print_info()
+    # RDM MODEL SHOULD MAYBE START HERE? No... or well it should be before we assign discountrates etc. But maybe after extracting Aspen_data!
+    Plost, Qlost, reboiler_steam = chp.energy_penalty(MEA)
+    chp.print_info()
 
-chp.plot_plant()
-chp.plot_plant(capture_states=reboiler_steam)
+    chp.plot_plant()
+    chp.plot_plant(capture_states=reboiler_steam)
 
-# HEAT INTEGRATION WORK BELOW
-considered_streams = ['wash', 'toabs', 'strip', 'lean', 'int2', 'int1', 'dcc', 'dhx', 'dry', 'dum', 'rcond', 'rint', 'preliq']
-considered_streams = ['wash', 'toabs', 'strip', 'lean', 'int2', 'int1', 'dhx', 'dry', 'rcond', 'rint', 'preliq']
+    # HEAT INTEGRATION WORK BELOW
+    # considered_streams = ['wash', 'toabs', 'strip', 'lean', 'int2', 'int1', 'dcc', 'dhx', 'dry', 'dum', 'rcond', 'rint', 'preliq']
+    # considered_streams = ['wash', 'toabs', 'strip', 'lean', 'int2', 'int1', 'dhx', 'dry', 'rcond', 'rint', 'preliq']
+    considered_streams = ['wash', 'strip', 'lean', 'int2', 'int1', 'dhx', 'dry', 'rcond', 'rint', 'preliq'] # Add 'dcc' (not 'toabs'?) when DCC HEX is needed
 
-stream_data = MEA.identify_streams(considered_streams)
-MEA.plot_streams(stream_data)
+    stream_data = MEA.identify_streams(considered_streams)
+    MEA.plot_streams(stream_data)
 
-temperature_ranges = MEA.find_ranges(stream_data)
-Qranges = MEA.heat_ranges(temperature_ranges, stream_data)
+    temperature_ranges = MEA.find_ranges(stream_data)
+    composite_curve = MEA.merge_heat(temperature_ranges, stream_data)
 
-# Assume DH temperature levels
-Tsupp = 86
-Thigh = 61 # TODO: Maybe just defined this as Tsupp+Tlow/2 ? Easier to motivate, and in-line with DH archetypes
-Tlow = 47
-Tmax = 100 # Get from MEAmodel? It's the maximum temp. where streams are allowed to give off heat.
-dTmin = 5
+    # Assume DH temperature levels
+    # Tsupp = 86
+    # Thigh = 61 # TODO: Maybe just defined this as Tsupp+Tlow/2 ? Easier to motivate, and in-line with DH archetypes
+    # Tlow = 47
+    # dTmin = 7
 
-Qhighgrade, Qlowgrade, Qcw, Tend = MEA.available_heat(temperature_ranges, Qranges, Tmax, Tsupp, Thigh, Tlow, dTmin=dTmin) #TODO: Harness Q_cw using heatpump?
-MEA.plot_composite(temperature_ranges, Qranges, Tmax, Tsupp, Thigh, Tlow, dTmin=dTmin)
+    Tsupp = 86
+    Tlow = 38
+    dTmin = 7
+
+    Qsupp, Qlow, Qpinch, Tpinch = MEA.available_heat2(composite_curve, Tsupp, Tlow, dTmin=dTmin)
+    MEA.plot_hexchange(Qsupp, Qlow, Qpinch, Tpinch, dTmin, Tlow, Tsupp) #TODO: Move some values to the self. of CHP or MEA
+    Qrecovered = (Qpinch-Qsupp) + (Qlow-Qpinch)
+    Qcw = MEA.composite_curve[-1][0]-Qlow
+    chp.Qdh += round(Qrecovered/1000)
+    chp.print_info()
+
+plt.show()
+
+
 
 # # But what is the cost of this heat exchange? Find areas!
 # U = 1 #kW/m2K, (Deng compr study)
@@ -84,43 +83,6 @@ MEA.plot_composite(temperature_ranges, Qranges, Tmax, Tsupp, Thigh, Tlow, dTmin=
 # print(Qdh, mcoolingwater)
 # chp.print_info()
 
-plt.show()
-
-# ## EXAMPLE OF HOW TO MOVE FROM DATA TO INTERPOLATED VALUES
-# import pandas as pd
-# from sklearn.multioutput import MultiOutputRegressor
-# from sklearn.linear_model import LinearRegression
-
-# # Example DataFrame for input data
-# data = {'x1': [1, 2, 3, 4, 5],
-#         'x2': [2, 3, 4, 5, 6]}
-# df = pd.DataFrame(data)
-
-# # Example DataFrame for output data
-# output_data = {'y1': [10, 20, 30, 40, 50],
-#                'y2': [15, 25, 35, 45, 55]}
-# output_df = pd.DataFrame(output_data)
-
-# # Create X and y from DataFrames
-# X = df.values
-# y = output_df.values
-
-# # Create a multi-output regression model using linear regression as the base regressor
-# model = MultiOutputRegressor(LinearRegression())
-
-# # Fit the model
-# model.fit(X, y, feature_names_in_=True)
-
-# # Predict new output given new values of x1 and x2
-# new_data = pd.DataFrame({'x1': [3.5], 'x2': [6]})  # New data point
-# predicted_y = model.predict(new_data)
-
-# # Convert predicted_y to a DataFrame with appropriate column names
-# predicted_df = pd.DataFrame(predicted_y, columns=output_df.columns)
-
-# # Now you can access predicted values by column names
-# interesting_output = predicted_df['y1']
-# print(interesting_output)
 
 
 # Aspen_data = MEA.linearReg(Aspen_data) #This is ok and can happen, but some things (e.g. Acool1) should not be used
