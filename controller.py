@@ -7,9 +7,8 @@ import matplotlib.pyplot as plt
 from functions import *
 
 # DEFINE MY INPUT DATA
-W2E_data = pd.read_csv("W2E.csv", sep=";", decimal=',')  # Replace "your_data.csv" with the path to your CSV file
+W2E_data = pd.read_csv("W2E.csv", sep=";", decimal=',') 
 plant_data = pd.read_csv("plant_data.csv", sep=";", decimal=',')
-# x = plant_data.iloc[0]
 print(plant_data.head())
 
 for index, row in plant_data.iterrows():

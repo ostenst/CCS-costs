@@ -44,7 +44,7 @@ class State:
         plt.annotate( str(self)+': '+str(round(self.p,2))+' bar' if pressure else str(self), (self.s, self.T), textcoords="offset points", xytext=(5,5))
 
 class CHP:
-    def __init__(self, Name, Fuel=None, Qdh=0, P=0, Qfgc=0, Tsteam=0, psteam=0, Qfuel=0, Vfg=0, mCO2=0, duration=8000):
+    def __init__(self, Name, Fuel=None, Qdh=0, P=0, Qfgc=0, Tsteam=0, psteam=0, Qfuel=0, Vfg=0, mCO2=0):
         self.name = Name
         self.fuel = Fuel
         self.Qdh = Qdh
@@ -55,7 +55,6 @@ class CHP:
         self.Qfuel = Qfuel
         self.Vfg = Vfg
         self.mCO2 = mCO2
-        self.duration = duration
 
         if Fuel == "B":
             self.fCO2 = 0.16
@@ -98,14 +97,13 @@ class CHP:
 
         # FLUEGASES #TODO: calculate based on johanna+thunman
         self.mCO2 = Qfuel * 0.355 #[tCO2/h]
-        Vfg = 2000000/110*self.mCO2/(self.fCO2/0.04) #[m3/h]
-        self.Vfg = Vfg
+        self.Vfg = 2000000/110*self.mCO2/(self.fCO2/0.04) #[m3/h]
 
         self.states = A,B,C,D
         if plotting == True:
             self.plot_plant(A,B,C,D)
 
-        if msteam is not None and Pestimated is not None and Qfuel > 0 and pcond_guess > 0 and self.mCO2 > 0 and Vfg > 0:
+        if msteam is not None and Pestimated is not None and Qfuel > 0 and pcond_guess > 0 and self.mCO2 > 0 and self.Vfg > 0:
             return
         else:
             raise ValueError("One or more of the variables (msteam, Pestimated, Qfuel, pcond_guess, mCO2, Vfg) is not positive.")
@@ -122,7 +120,7 @@ class CHP:
             sV = steamTable.sV_t(T)
             saturation_line.append([sL,T])
             saturation_line.append([sV,T])
-        plt.figure(figsize=(8, 6))  # Set the figure size
+        plt.figure(figsize=(8, 6))  
         for state in saturation_line:
             plt.plot(state[0], state[1], marker='.', linestyle='-', color='k', markersize=1)
         plt.xlim(0, 10)
@@ -195,7 +193,6 @@ class MEA_plant:
         self.currency_factor = currency_factor
         self.discount = discount
         self.lifetime = lifetime
-        self.duration = host_plant.duration
         self.composite_curve = None
 
     def get(self, parameter):
@@ -217,18 +214,6 @@ class MEA_plant:
         self.data = predicted_df
         return 
 
-# NOAK factors:                 SOURCES:
-# PC = 0-10                     white paper
-# IC = 25 (14 EBTF)             site-TEA Tharun/Max
-# Proj cont = 30                white paper
-# OC&Interest = 9.5 (15 EBTF, maybe 7 Rubin) site-TEA Tharun/Max
-
-# FOAK factors (intended for TRL6-7, according to Rubin whitepaper):
-# PC = 20-35 (for TRL 5-6) or 30-70 (for TRL4)  white paper
-# IC = 25 (14 EBTF)             site-TEA Tharun/Max
-# Proj cont = 50                white paper
-# OC&Interest = 9.5 (15 EBTF, maybe 7 Rubin) site-TEA Tharun/Max
-# Also add redundancy etc.      white paper
     def identify_streams(self, stream_indicies):
         stream_data = {}
         for component in stream_indicies:
