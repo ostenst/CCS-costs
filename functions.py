@@ -426,7 +426,7 @@ class MEA_plant:
 
         plt.xlabel('Q [kW]')
         plt.ylabel('T [C]')
-        plt.title('Heat exchange between composite curve and district heating')
+        plt.title(f'[{self.host.name}] Heat exchange between composite curve and district heating')
         plt.legend()
         if show:
             plt.show()

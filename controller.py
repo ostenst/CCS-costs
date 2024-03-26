@@ -3,13 +3,8 @@ Model() for CCS-cost analysis of 1 plant
 Later, the Controller() will ask the Model() to run many times given plant_data.
 """
 import pandas as pd
-import numpy as np
-import math
 import matplotlib.pyplot as plt
-from pyXSteam.XSteam import XSteam
-from sklearn.linear_model import LinearRegression
 from functions import *
-import warnings
 
 # DEFINE MY INPUT DATA
 W2E_data = pd.read_csv("W2E.csv", sep=";", decimal=',')  # Replace "your_data.csv" with the path to your CSV file
@@ -28,7 +23,7 @@ for index, row in plant_data.iterrows():
         Tsteam=float(row["Live steam temperature (degC)"]),
         psteam=float(row["Live steam pressure (bar)"])
     )
-    chp.estimate_performance(plotting=False)
+    chp.estimate_performance()
     chp.print_info()
     MEA = MEA_plant(chp) #should be f(volumeflow,%CO2)... maybe like this: MEA_plant(host=chp, constr_year, currency, discount, lifetime)
     MEA.estimate_size(W2E_data)
@@ -51,12 +46,6 @@ for index, row in plant_data.iterrows():
 
     temperature_ranges = MEA.find_ranges(stream_data)
     composite_curve = MEA.merge_heat(temperature_ranges, stream_data)
-
-    # Assume DH temperature levels
-    # Tsupp = 86
-    # Thigh = 61 # TODO: Maybe just defined this as Tsupp+Tlow/2 ? Easier to motivate, and in-line with DH archetypes
-    # Tlow = 47
-    # dTmin = 7
 
     Tsupp = 86
     Tlow = 38
