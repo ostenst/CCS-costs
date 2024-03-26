@@ -78,30 +78,50 @@ for index, row in plant_data.iterrows():
     MEA.plot_hexchange()
 
     # DETERMINE COSTS
-    # CAPEX1 / i1 = CAPEX2 / i2 (https://link.springer.com/article/10.1007/s10973-021-10833-z)
-    # annualization = (i*(1+i)**n )/((1+i)**n-1) 
-    # aCAPEX = annualization*CAPEX
     # NPV = sum(t=1->n)( cash(t)/(1+i)^t )
 
     alpha = 6.12
     beta = 0.6336
     CAPEX = alpha*(CHP.Vfg/3600)**beta # [MEUR] (Eliasson, 2021) who has cost year = 2016
-    CEPCI = 600/550
+    CEPCI = 600/550 #(https://link.springer.com/article/10.1007/s10973-021-10833-z)
     CAPEX = CAPEX*CEPCI
 
     i = 0.075
     t = 25
     annualization = (i*(1+i)**t )/((1+i)**t-1) 
-    aCAPEX = annualization*CAPEX
+    aCAPEX = annualization*CAPEX #MEUR/yr
 
-    print(CHP.Vfg/3600)
-    print(CAPEX)
-    print(aCAPEX)
-    print(annualization)
+    fixedOPEX = 0.06 * CAPEX #MEUR/yr
+    celc = 40
+    cheat = 15
+    energyOPEX = (Plost*celc + Qlost*cheat)*8000 *10**-6 #MEUR/yr
+    cMEA = 2 # EUR/kg
+    otherOPEX = MEA.get("Makeup")*cMEA *3600*8000 *10**-6 #MEUR/yr
 
-    flow = CHP.mCO2 * 8000 #t/yr
-    print(flow)
-    print(CAPEX/flow*10**6) #suspiciously high specific cost? 273EUR/t instead of like 40EUR/t? My guess is that mCO2 is actually low... 16.9kg/s(Beiron)?
-    print(CHP.mCO2*1000/3600) # but this is super close, i.e. 16.7kg/s! Maybe mCO2 is correct then?
+    costs = [aCAPEX, fixedOPEX, energyOPEX, otherOPEX] #MEUR/yr
+    costs_specific = [x*10**6 / (CHP.mCO2*8000) for x in costs] #EUR/tCO2
 
+    cost_labels = ['aCAPEX', 'fixedOPEX', 'energyOPEX', 'otherOPEX']
+
+    # Plotting the segmented bar chart
+    plt.figure(figsize=(10, 6))
+
+    # Define the positions for each segment
+    positions = range(len(costs_specific))
+    width = 0.5
+
+    # Plot each segment
+    bottom = 0
+    for i, cost in enumerate(costs_specific):
+        plt.bar(0, cost, bottom=bottom, label=cost_labels[i])
+        bottom += cost
+
+    plt.xlabel('Cost Element')
+    plt.ylabel('Specific Cost (EUR/tCO2)')
+    plt.title('Specific Costs Breakdown')
+    plt.ylim(0, sum(costs_specific) * 1.2)
+    plt.legend()
+
+    plt.grid(axis='y')
+    
 plt.show()
