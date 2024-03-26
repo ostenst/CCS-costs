@@ -1,0 +1,5 @@
+City;Plant Name;Fuel (W=waste, B=biomass);Heat output (MWheat);Electric output (MWe);Existing FGC heat output (MWheat);Year of commissioning;Live steam temperature (degC);Live steam pressure (bar)
+Goteborg;Renova ;W;126;45;38;1995;400;40
+Stockholm (South);Hogdalen G1 ;W;115;44;26;1970;400;36
+Vasteras;Vasteras Block 6 ;W;110;48,5;30;2014;470;75
+Linkoping;Gardestadverket Glashuset ;W;75;19;45;2010;400;40

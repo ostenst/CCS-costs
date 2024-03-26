@@ -72,12 +72,11 @@ class CHP:
     def estimate_performance(self, plotting=False):
         # ENERGY BALANCE
         Ptarget = self.P
-        print(Ptarget)
         Qdh = self.Qdh
         A = State("A", self.psteam, self.Tsteam)
 
         max_iterations = 100
-        pcond_guess = 4
+        pcond_guess = 2
         Pestimated = 0
         i = 0
         tol = 0.05
@@ -170,7 +169,6 @@ class CHP:
         W = 0
         for Wi in ["Wpumps","Wcfg","Wc1","Wc2","Wc3","Wrefr1","Wrefr2","Wrecomp"]:
             W += MEA.get(Wi)
-
         Pnew = mtot*(A.h-a.h) + mB*(a.h-B.h) - W #Subtract pump, comp work etc.
         Plost = self.P - Pnew/1000
         self.P = Pnew/1000
@@ -191,32 +189,129 @@ class MEA_plant:
     def __init__(self, host_plant, construction_year=2024, currency_factor=0, discount=0.08, lifetime=25):
         self.host = host_plant
         self.data = None
+        # self.data = Aspen_data #self.data should point to the individual plant data, not the total Aspen_data
+        # self.mfluegas = Aspen_data["M_FLUEGAS"].values[0]
+        # self.rhofluegas = Aspen_data["RHO_FLUEGAS"].values[0]
+        #self.data_sized = None THIS IS THE DATAFRAME THAT SHOULD BE SENT TO direct_cost
+
+        self.equipment_list = ['B4', 'COOL1', 'COOL2', 'COOL3', 'DCCHX', 'DRYCOOL', 'DUMCOOL', 'HEX', 'B5', 'PA2627', 'DCCPUMP',
+                  'PUMP','STRIPPER','WASHER','DCC','ABSORBER','FLASH1','FLASH2','DRYFLASH', 'REBOIL', 'B311']
         self.construction_year = construction_year
         self.currency_factor = currency_factor
         self.discount = discount
         self.lifetime = lifetime
+        self.annualization = 0
+        for n in range(1, lifetime):
+            self.annualization += 1/(1 + discount)**n
         self.duration = host_plant.duration
         self.composite_curve = None
 
-    def get(self, parameter):
-        return self.data[parameter].values[0]
-
     def estimate_size(self, Aspen_data):
-        df = Aspen_data #TODO: Move this outside of RDM loop?
+        df = Aspen_data
         X = df[['CO2%', 'Flow']]
         y = df.drop(columns=['CO2%', 'Flow'])
 
         model = MultiOutputRegressor(LinearRegression())
         model.fit(X, y)
-        print("Estimated flue gas volume: ", self.host.Vfg, " [m3/h], or ", self.host.Vfg/3600*0.8, " [kg/s]" )
+
         new_input = pd.DataFrame({'CO2%': [self.host.fCO2*100], 'Flow': [self.host.Vfg/3600*0.8]})  # Fraction of CO2=>percentage, and massflow [kg/s], of flue gases
         predicted_y = model.predict(new_input)
         predicted_df = pd.DataFrame(predicted_y, columns=y.columns)
-        # print("MEA plant is this big: ")
-        # print(predicted_df.head())
+        print("MEA plant is this big: ")
+        print(predicted_df.head())
         self.data = predicted_df
         return 
 
+    def get(self, parameter):
+        return self.data[parameter].values[0]
+
+    def direct_cost(self, equipment): 
+        #TODO: Double check these, also compressor function?
+        #TODO: Missing COMPRESSION&LIQUEFACTION stages!
+        df = self.data #TODO: ASPEN DATA HAS SOME SIZES, BUT NOT ALL! SOME ARE GIVEN BY ENERGY BALANCE (HEXs)
+        HEX_list = ['B4', 'COOL1', 'COOL2', 'COOL3', 'DCCHX', 'DRYCOOL', 'DUMCOOL', 'HEX', 'B5', 'PA2627']
+        pump_list = ['DCCPUMP','PUMP']
+        tower_list = ['STRIPPER','WASHER','DCC','ABSORBER']
+        flash_list = ['FLASH1','FLASH2','DRYFLASH']
+
+        if equipment in HEX_list:                               #TODO: Calculate Areas in E-BALANCE function first! Where HEATPUMPS can be installed for full recovery, but (later, PaperIII) be operated flexibly.
+            key = 'A_' + equipment
+            area = df[key][1]
+            cost = 2.8626 * area**0.7988        #EUR2015 convert with CEPCI, AVOIDED COST REQUIRES GRID EMISSIONS (Scope2), TRANPOSRT=0 for now (Scope3, storage, leakage)
+                                                # How to integrate low CONC%? 
+            
+            #cost2024 = cost2015*(CEPCI2024/CEPCI2015), check what is a good year, e.g. 2022? 2024 is a very rough estimate.
+            #Apply exchange rate of the year considered! e.g. to USD (e.g. average of the year)
+
+        if equipment in pump_list:
+            key = 'VT_' + equipment
+            volumeflow = df[key][1]
+            cost = 32.147 * (volumeflow*1000)**0.6029 #L/s
+
+        if equipment in tower_list: #TODO: CHECK ABSORBER DIMENSIONS; PROBABLY WRONG IN EXCEL
+            key = 'D_' + equipment
+            diameter = df[key][1]
+            key = 'H_' + equipment
+            height = df[key][1]
+            volume = 3.1415 * diameter**2/4 * height
+            cost = 91.764 * volume**0.6154
+
+        if equipment in flash_list:
+            key = 'V_' + equipment
+            volume = df[key][1]
+            cost = 66.927 * volume**0.5047
+
+        if equipment == 'REBOIL':
+            key = 'Q_' + equipment
+            Qreb = df[key][1]
+            U = 1.5 #kW/m2K (Biermann)
+            dT1 = 131.1-121.09  #Assuming reboiler temps. and dTmin #TODO: MOVE THIS TO THE E-BALANCE FUNCTION
+            dT2 = 131.09-121.1
+            LMTD = (dT1 - dT2)/math.log(dT1/dT2)
+            A = Qreb/(U*LMTD)
+            cost = 1.6758 * A**0.8794
+        
+        if equipment == 'B311':
+            key = 'W_' + equipment
+            work = df[key][1]
+            cost = 2.7745 * work**0.7814
+
+        # TODO: Apply currency conversion here.
+        return cost
+
+    def NOAK_escalation(self, TDC):
+        # aCAPEX:
+        process_contingency = 0.15
+        TDCPC = TDC*(1 + process_contingency)
+        indirect_costs = 0.25
+        EPC = TDCPC*(1 + indirect_costs)
+        project_contingency = 0.30
+        TPC = EPC*(1 + project_contingency) #Use for OPEX
+        ownercost_interest = 0.095
+        TCR = TPC*(1 + ownercost_interest)
+
+        aCAPEX = TCR/self.annualization
+
+        # OPEX (non-energy): (Site-TEA-Tharun)¨
+        mMEA = self.get("M_MAKEUP")      #kg/s
+        mMEA = mMEA/1000 * 3600*self.duration       #tMEA/a
+        cost_MEA = mMEA * 1.7                       #kEUR/a
+
+        mH2O = self.get("M_H2OIN")       #kg/s
+        mH2O = mH2O/1000 * 3600*self.duration       #tH2O/a
+        cost_H2O = mH2O * 0.02/1000                 #kEUR/a 
+       
+        cost_maintenance = TPC * 0.045              #kEUR/a 
+        cost_labor = 411                            #kEUR/a 
+
+        return TCR, aCAPEX, cost_H2O, cost_MEA, cost_maintenance, cost_labor
+
+    def specific_annualized(self, cost):
+        cost = cost/self.annualization              #kEUR,annualized
+        mCO2 = self.get("MCO2_CO2OUT")              #kgCO2/s
+        mCO2 = mCO2/1000 * 3600*self.duration       #tCO2/a
+        cost_specific = cost/mCO2 * 1000            #EUR/tCO2
+        return cost_specific
 # NOAK factors:                 SOURCES:
 # PC = 0-10                     white paper
 # IC = 25 (14 EBTF)             site-TEA Tharun/Max
@@ -366,8 +461,10 @@ class MEA_plant:
     
     def available_heat2(self, composite_curve, Tsupp, Tlow, dTmin=10):
 
+        plt.clf()
         shifted_curve = [[point[0], point[1] - dTmin] for point in composite_curve]
         curve = shifted_curve
+
         # Calculate the distances of each point from the line formed by connecting the endpoints. Find the elbow point (point of maximum curvature).
         def distance(p1, p2, p):
             x1, y1 = p1
@@ -399,37 +496,20 @@ class MEA_plant:
         
         Qsupp = linear_interpolation(curve, Tsupp)
         Qlow = linear_interpolation(curve, Tlow)
-        Qpinch, Tpinch = curve[max_curvature_index][0], curve[max_curvature_index][1]
 
-        return Qsupp, Qlow, Qpinch, Tpinch
-    
-    def plot_hexchange(self, Qsupp, Qlow, Qpinch, Tpinch, dTmin, Tlow, Tsupp, show=False): #TODO: Move temperatures to the CHP or the MEA class!
-        plt.figure(figsize=(10, 8))
-        composite_curve = self.composite_curve
-        shifted_curve = [[point[0], point[1] - dTmin] for point in composite_curve]
-        (Qpinch-Qsupp) + (Qlow-Qpinch)
+        # # Plot the elbow point on the curve
+        # plt.plot([point[0] for point in composite_curve], [point[1] for point in composite_curve], marker='o', color='pink')
+        # plt.plot([point[0] for point in shifted_curve], [point[1] for point in shifted_curve], marker='o', color='red')
+        # plt.plot(curve[max_curvature_index][0], curve[max_curvature_index][1], marker='x', color='blue', markersize=10, label='Elbow Point')
+        # plt.scatter(Qlow, Tlow, marker='x', color='blue', label='Tlow')
+        # plt.scatter(Qsupp, Tsupp, marker='x', color='blue', label='Tlow')
+        # plt.xlabel('X')
+        # plt.ylabel('Y')
+        # plt.title('Curve with Elbow Point')
+        # plt.legend()
+        # plt.show()
+        # print("Elbow point coordinates:", curve[max_curvature_index])
 
-
-        # Plot the elbow point on the curve
-        plt.plot([0, self.get("Qreb")], [self.get("Treb"), self.get("Treb")], marker='*', color='#a100ba', label='Qreboiler')
-        plt.plot([point[0] for point in composite_curve], [point[1] for point in composite_curve], marker='o', color='red', label='T of CCS streams')
-        plt.plot([point[0] for point in shifted_curve], [point[1] for point in shifted_curve], marker='o', color='pink', label='T shifted')
-        plt.plot([Qpinch, Qlow], [Tpinch, Tlow], marker='x', color='#069AF3', label='Qlowgrade')
-        plt.plot([Qpinch, Qsupp], [Tpinch, Tsupp], marker='x', color='blue', label='Qhighgrade')
-        plt.plot([Qlow, composite_curve[-1][0]], [20, 15], marker='o', color='#0000FF', label='Cooling water') # NOTE: hard-coded CW temps.
-
-        plt.text(26000, 55, f'dTmin={dTmin} C', color='black', fontsize=12, ha='center', va='center')
-        plt.text(26000, 115, f'Qreb={round(self.get("Qreb")/1000)} MW', color='#a100ba', fontsize=12, ha='center', va='center')       
-        plt.text(5000, 60, f'Qhighgrade={round((Qpinch-Qsupp)/1000)} MW', color='#0000FF', fontsize=12, ha='center', va='center')
-        plt.text(5000, 40, f'Qlowgrade={round((Qlow-Qpinch)/1000)} MW', color='#069AF3', fontsize=12, ha='center', va='center')
-        plt.text(10000, 15, f'Qcoolingwater={round((composite_curve[-1][0]-Qlow)/1000)} MW', color='#0000FF', fontsize=12, ha='center', va='center')
-
-        plt.xlabel('Q [kW]')
-        plt.ylabel('T [C]')
-        plt.title(f'[{self.host.name}] Heat exchange between composite curve and district heating')
-        plt.legend()
-        if show:
-            plt.show()
         return
 
     def exchanger_areas(self, Qhighgrade, Qlowgrade, Qcw, U, dTmin, Tmax, Tsupp, Tlow, Tend):
