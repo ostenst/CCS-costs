@@ -9,7 +9,7 @@ from sklearn.multioutput import MultiOutputRegressor
 from sklearn.linear_model import LinearRegression
 
 # DEFINE MY INPUT DATA AND REGRESSIONS OF ASPEN DATA
-plant_data = pd.read_csv("plant_data.csv", sep=";", decimal=',')
+plant_data = pd.read_csv("plant_data_test.csv", sep=";", decimal=',')
 print(plant_data.head())
 
 W2E_data = pd.read_csv("W2E.csv", sep=";", decimal=',')
@@ -60,7 +60,7 @@ for index, row in plant_data.iterrows():
     CHP.plot_plant()
     CHP.plot_plant(capture_states=reboiler_steam)
 
-    # HEAT INTEGRATION WORK BELOW
+    # RECOVER EXCESS HEAT TO DH
     if CHP.fuel == "W" or "B": # Arbitrary before industrial cases are added
         consider_dcc = False
 
@@ -76,5 +76,32 @@ for index, row in plant_data.iterrows():
     CHP.Qdh += round(Qrecovered/1000)
     CHP.print_info()
     MEA.plot_hexchange()
+
+    # DETERMINE COSTS
+    # CAPEX1 / i1 = CAPEX2 / i2 (https://link.springer.com/article/10.1007/s10973-021-10833-z)
+    # annualization = (i*(1+i)**n )/((1+i)**n-1) 
+    # aCAPEX = annualization*CAPEX
+    # NPV = sum(t=1->n)( cash(t)/(1+i)^t )
+
+    alpha = 6.12
+    beta = 0.6336
+    CAPEX = alpha*(CHP.Vfg/3600)**beta # [MEUR] (Eliasson, 2021) who has cost year = 2016
+    CEPCI = 600/550
+    CAPEX = CAPEX*CEPCI
+
+    i = 0.075
+    t = 25
+    annualization = (i*(1+i)**t )/((1+i)**t-1) 
+    aCAPEX = annualization*CAPEX
+
+    print(CHP.Vfg/3600)
+    print(CAPEX)
+    print(aCAPEX)
+    print(annualization)
+
+    flow = CHP.mCO2 * 8000 #t/yr
+    print(flow)
+    print(CAPEX/flow*10**6) #suspiciously high specific cost? 273EUR/t instead of like 40EUR/t? My guess is that mCO2 is actually low... 16.9kg/s(Beiron)?
+    print(CHP.mCO2*1000/3600) # but this is super close, i.e. 16.7kg/s! Maybe mCO2 is correct then?
 
 plt.show()
