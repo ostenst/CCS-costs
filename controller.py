@@ -34,10 +34,12 @@ for index, row in plant_data.iterrows():
     )
     
     # ESTIMATE ENERGY BALANCE AND FLUE GASES                                                   
-    CHP.estimate_performance()                                                                      # <--- BEGIN RDM EFTER THIS ESTIMATION? YES!
+    CHP.estimate_performance()                                                                      # <--- BEGIN RDM_MODEL() EFTER THIS ESTIMATION? YES! Send CHP as argument...?
+    eta_boiler = 0.87
+    CHP.Qfuel *= 1/eta_boiler #LHV! Är det 10-12MJ/kg? (Johanna), kanske 8 om fuktigare
     
-    if CHP.fuel == "B":
-        CHP.fCO2 = 0.16
+    if CHP.fuel == "B": #TODO: fixa sambandet bränslekomposition->CO2frac och rökgasvolym
+        CHP.fCO2 = 0.16 #Höga? Johanna tror 8-10% waste, och 13-16% biochips
     if CHP.fuel == "W":
         CHP.fCO2 = 0.11
     
@@ -49,7 +51,7 @@ for index, row in plant_data.iterrows():
     MEA = MEA_plant(CHP) #should be f(volumeflow,%CO2)... maybe like this: MEA_plant(host=chp, constr_year, currency, discount, lifetime)
 
     if CHP.fuel == "W":
-        MEA.estimate_size(W2E_regression, W2E_data)
+        MEA.estimate_size(W2E_regression, W2E_data) 
     if CHP.fuel == "B":
         print("Aspen data not available for bio-chip fired")
 
@@ -77,33 +79,74 @@ for index, row in plant_data.iterrows():
     CHP.print_info()
     MEA.plot_hexchange()
 
-    # DETERMINE COSTS
+    # DETERMINE CAPEX                                                                     <--- BELOW CALCS NEEDS TO TURN INTO MEA.methods()
+    # TODO: determine social vs private cost (maybe cascade? how does this increase the costs for end-consumers?)(compare with Levinh, 2019)(EU fines for non-compliance?)
     # NPV = sum(t=1->n)( cash(t)/(1+i)^t )
 
     alpha = 6.12
     beta = 0.6336
-    CAPEX = alpha*(CHP.Vfg/3600)**beta # [MEUR] (Eliasson, 2021) who has cost year = 2016
+    CAPEX = alpha*(CHP.Vfg/3600)**beta # [MEUR] (Eliasson, 2021) who has cost year = 2016 #TODO: Need T,p of fluegases to convert to Nm3 , before sending to
     CEPCI = 600/550 #(https://link.springer.com/article/10.1007/s10973-021-10833-z)
-    CAPEX = CAPEX*CEPCI
+    CAPEX *= CEPCI              # This is time-adjusted TDC=TIC
+    fixedOPEX = 0.06 * CAPEX #MEUR/yr
+
+    owners_cost = 0.2
+    CAPEX *= 1+owners_cost      # This is TOC
+
+    WACC = 0.05
+    yexpenses = 3
+    rescalation = 0.03
+
+    escalation = 0
+    for n in range(1,yexpenses+1):
+        escalation += (1+rescalation)**(n-1)*(1/yexpenses)
+    cfunding = 0
+    for n in range(1,yexpenses+1):
+        cfunding += WACC*(yexpenses-n+1)*(1+rescalation)**(n-1)*(1/yexpenses)
+    CAPEX *= escalation+cfunding # This is TASC
 
     i = 0.075
     t = 25
     annualization = (i*(1+i)**t )/((1+i)**t-1) 
     aCAPEX = annualization*CAPEX #MEUR/yr
 
-    fixedOPEX = 0.06 * CAPEX #MEUR/yr
+    # DETERMINE var-OPEX
     celc = 40
     cheat = 15
-    energyOPEX = (Plost*celc + Qlost*cheat)*8000 *10**-6 #MEUR/yr
+    duration = 8000
+    energyOPEX = (Plost*celc + Qlost*cheat)*duration *10**-6 
     cMEA = 2 # EUR/kg
-    otherOPEX = MEA.get("Makeup")*cMEA *3600*8000 *10**-6 #MEUR/yr
+    otherOPEX = MEA.get("Makeup")*cMEA *3600*duration *10**-6 
 
-    costs = [aCAPEX, fixedOPEX, energyOPEX, otherOPEX] #MEUR/yr
-    costs_specific = [x*10**6 / (CHP.mCO2*8000) for x in costs] #EUR/tCO2
 
+    # SYNTHESIZE AND PLOT
     cost_labels = ['aCAPEX', 'fixedOPEX', 'energyOPEX', 'otherOPEX']
+    costs = [aCAPEX, fixedOPEX, energyOPEX, otherOPEX] #MEUR/yr
+    costs_specific = [x*10**6 / (CHP.mCO2*duration) for x in costs]     #EUR/tCO2
 
-    # Plotting the segmented bar chart
+    emission_intensity = 0.355*CHP.Qfuel / (CHP.Qdh+CHP.Qfgc+CHP.P)     #tCO2/MWhoutput, NOTE: these are total emissions produced, only 90% of these are captured.
+    consumer_cost = emission_intensity * 0.9 * sum(costs_specific)      #EUR/MWhoutput
+    print(consumer_cost)
+
+
+    # ADD COST ESCALATION (READ ELIASON: IS THIS ABSOLUTE CAPEX=TPC? SO WE ESCALATE IT?)
+    # capture plant: he summarises EIC of individual components into a TotalInstalledCost. But EIC includes condingencies already!(Ali) And in Ali, TIC=TDC, but misses TOC/TASC escalation
+    # liquefaction plant: estimated TotalDirectCost by scaling from Deng. Then multiply by contingeiny(Deng) to get TIC.
+    # issue: they already include congingencies, but I want this as an uncertainty!
+    # solution: open ApepndixA => to see the equipment, AppendixB => their cost functions, open Ali2019 => equipment factors
+
+    # We can add TOC: up to +20%of TDC (NETL, https://www.osti.gov/servlets/purl/1567736). This includes start-up, working/inventory capital, land, securing financing
+    # => introduce 1 uncertainty 0-20%
+    # We can add TASC, but this requires WACC etc. This tells us how the capital is incurred during the expenditure period, and how it escalates.
+    # => introduce 3 uncertainties: i=capital escalation rate, dy=years of capital expenditure, WACC=capital distribution
+    # This could work... but maybe this is incompatible with the annualization?
+    
+    # FOAK: we can add system contingenciy of 1st, 2nd, 3rd plant (towards). Let's treat HPC as NOAK standalone, but FOAK when systemintegrated.
+    
+    # ADD SITE-TEA
+
+
+    # Plotting the: costs_specific
     plt.figure(figsize=(10, 6))
 
     # Define the positions for each segment

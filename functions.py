@@ -193,7 +193,7 @@ class MEA_plant:
 
         y = Aspen_data.drop(columns=['CO2%', 'Flow']) # Need to keep this, to be able to name the columns of predicted_df
     
-        print("Estimated flue gas volume: ", self.host.Vfg, " [m3/h], or ", self.host.Vfg/3600*0.8, " [kg/s]" )
+        # print("Estimated flue gas volume: ", self.host.Vfg, " [m3/h], or ", self.host.Vfg/3600*0.8, " [kg/s]" )
         new_input = pd.DataFrame({'CO2%': [self.host.fCO2*100], 'Flow': [self.host.Vfg/3600*0.8]})  # Fraction of CO2=>percentage, and massflow [kg/s], of flue gases
         predicted_y = model.predict(new_input)
         predicted_df = pd.DataFrame(predicted_y, columns=y.columns)
