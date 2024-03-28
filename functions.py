@@ -54,6 +54,7 @@ class CHP_plant:
         self.ybirth = ybirth
         self.Tsteam = Tsteam
         self.psteam = psteam
+        self.technology_assumptions = None
         self.Qfuel = Qfuel
         self.Vfg = Vfg
         self.fCO2 = 0
@@ -99,7 +100,22 @@ class CHP_plant:
             return
         else:
             raise ValueError("One or more of the variables (msteam, Pestimated, Qfuel, pcond_guess) is not positive.")
+        
+    def burn_fuel(self):
+        X = self.technology_assumptions
 
+        self.Qfuel *= 1 / X["eta_boiler"]
+
+        if self.fuel == "B":
+            self.fCO2 = X["fCO2_B"]
+        elif self.fuel == "W":
+            self.fCO2 = X["fCO2_W"]
+
+        self.mCO2 = self.Qfuel * 0.355  # [tCO2/h]
+        self.Vfg = 2000000 / 110 * self.mCO2 / (self.fCO2 / 0.04)  # [m3/h]
+
+        return self.Vfg, self.fCO2
+    
     def plot_plant(self, capture_states=None, show=False):
         A,B,C,D = self.states
         T_start = 0.01
@@ -145,9 +161,12 @@ class CHP_plant:
             plt.show()
         return
     
-    def energy_penalty(self, MEA, dTreb):
+    def energy_penalty(self, MEA):
+        dTreb = self.technology_assumptions["dTreb"]
+        eta_boiler = self.technology_assumptions["eta_boiler"]
+
         A,B,C,D = self.states
-        mtot = self.Qfuel*1000 / (A.h-C.h)
+        mtot = self.Qfuel*eta_boiler*1000 / (A.h-C.h) #WE HAVE TOO MUCH MASS; BECAUSE WE USE THE UPDATED QFUEL
         TCCS = MEA.get("Treb") + dTreb
         pCCS = steamTable.psat_t(TCCS)
         Ta = steamTable.t_ps(pCCS,A.s)
@@ -173,11 +192,11 @@ class CHP_plant:
         return Plost, Qlost, reboiler_steam
 
 class MEA_plant:
-    def __init__(self, host_plant, construction_year=2024, currency_factor=0, discount=0.08, lifetime=25):
+    def __init__(self, host_plant):
         self.host = host_plant
         self.data = None
         self.composite_curve = None
-        self.dTmin = None
+        self.dTmin = host_plant.technology_assumptions["dTmin"]
         self.QTdict = None
         self.economics = None
 
@@ -255,8 +274,10 @@ class MEA_plant:
         self.composite_curve = composite_curve
         return composite_curve
     
-    def available_heat(self, composite_curve, Tsupp, Tlow):
-
+    def available_heat(self, composite_curve):
+        Tsupp = self.host.technology_assumptions["Tsupp"]
+        Tlow = self.host.technology_assumptions["Tlow"]
+        
         shifted_curve = [[point[0], point[1] - self.dTmin] for point in composite_curve]
         curve = shifted_curve
         # Calculate the distances of each point from the line formed by connecting the endpoints. Find the elbow point (point of maximum curvature).

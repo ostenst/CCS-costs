@@ -33,51 +33,50 @@ for index, row in plant_data.iterrows():
         psteam=float(row["Live steam pressure (bar)"])
     )
     
-    # ESTIMATE ENERGY BALANCE AND FLUE GASES                                                   
-    CHP.estimate_performance()                                                                      # <--- BEGIN RDM_MODEL() EFTER THIS ESTIMATION? YES! Send CHP as argument...?
-    eta_boiler = 0.87
-    CHP.Qfuel *= 1/eta_boiler #LHV! Är det 10-12MJ/kg? (Johanna), kanske 8 om fuktigare
+    # ESTIMATE ENERGY BALANCE AND FLUE GASES
+    CHP.estimate_rankine() #Begin RDM after this
+
+    technology_assumptions = {
+    "eta_boiler": 0.87,
+    "fCO2_B": 0.16,  # For fuel type "B" #Höga? Johanna tror 8-10% waste, och 13-16% biochips
+    "fCO2_W": 0.11,  # For fuel type "W"
+    "dTreb": 10,
+    "Tsupp": 86,
+    "Tlow": 38,
+    "dTmin": 7,
+    }
+    CHP.technology_assumptions = technology_assumptions
     
-    if CHP.fuel == "B": #TODO: fixa sambandet bränslekomposition->CO2frac och rökgasvolym
-        CHP.fCO2 = 0.16 #Höga? Johanna tror 8-10% waste, och 13-16% biochips
-    if CHP.fuel == "W":
-        CHP.fCO2 = 0.11
-    
-    CHP.mCO2 = CHP.Qfuel * 0.355 #[tCO2/h]
-    CHP.Vfg = 2000000/110*CHP.mCO2/(CHP.fCO2/0.04) #[m3/h]
+    Vfg, fCO2 = CHP.burn_fuel() #LHV! Är det 10-12MJ/kg? (Johanna), kanske 8 om fuktigare
     CHP.print_info()
 
     # ESTIMATE SIZE OF MEA PLANT AND THE ENERGY PENALTY
-    MEA = MEA_plant(CHP) #should be f(volumeflow,%CO2)... maybe like this: MEA_plant(host=chp, constr_year, currency, discount, lifetime)
+    MEA = MEA_plant(CHP)
 
     if CHP.fuel == "W":
-        MEA.estimate_size(W2E_regression, W2E_data) 
-    if CHP.fuel == "B":
+        MEA.estimate_size(W2E_regression, W2E_data)
+    elif CHP.fuel == "B":
         print("Aspen data not available for bio-chip fired")
 
-    dTreb = 10
-    Plost, Qlost, reboiler_steam = CHP.energy_penalty(MEA, dTreb)
+    Plost, Qlost, reboiler_steam = CHP.energy_penalty(MEA)
     CHP.print_info()
 
     CHP.plot_plant()
     CHP.plot_plant(capture_states=reboiler_steam)
 
     # RECOVER EXCESS HEAT TO DH
-    if CHP.fuel == "W" or "B": # Arbitrary before industrial cases are added
+    if CHP.fuel == "W" or CHP.fuel == "B":  # Arbitrary before industrial cases are added
         consider_dcc = False
 
     stream_data = MEA.identify_streams(consider_dcc)
     composite_curve = MEA.merge_heat(stream_data)
     MEA.plot_streams(stream_data)
 
-    Tsupp = 86
-    Tlow = 38
-    MEA.dTmin = 7
-
-    Qrecovered = MEA.available_heat(composite_curve, Tsupp, Tlow)
+    Qrecovered = MEA.available_heat(composite_curve)
     CHP.Qdh += round(Qrecovered)
     CHP.print_info()
     MEA.plot_hexchange()
+
 
     # DETERMINE CAPEX 
     # TODO: determine social vs private cost (maybe cascade? how does this increase the costs for end-consumers?)(compare with Levinh, 2019)(EU fines for non-compliance?)
@@ -112,27 +111,13 @@ for index, row in plant_data.iterrows():
     consumer_cost = emission_intensity * 0.9 * sum(costs_specific)      #EUR/MWhoutput, NOTE: only 90% of these are captured and should be paid for by consumers
 
     energy_deficit = (Plost + (Qlost - Qrecovered))*economic_assumptions['duration']
-    print(Plost)
-    fuel_wasted = (Plost + (Qlost - Qrecovered))/(CHP.Qfuel)
+    fuel_penalty = (Plost + (Qlost - Qrecovered))/(CHP.Qfuel)
+
     print('Cost of capture: ', round(sum(costs_specific)), 'EUR/tCO2')
     print('Consumer added cost: +', round(consumer_cost), 'EUR/MWh')
     print('Energy deficit: ', round(energy_deficit/1000), 'GWh/yr')
-    print('Fuel wasted: ', round(fuel_wasted*100,1), '%, but in LHV! Higher if we compare HHV of fuel, which we should due to fgc being used.. or wait fgc is not used in this :)')
-    print('Small CHP: energy penalty not working, check how much MW is drawn to reboiler!')
+    print('Fuel penalty: ', round(fuel_penalty*100,1), '%')
 
-
-    # ADD COST ESCALATION (READ ELIASON: IS THIS ABSOLUTE CAPEX=TPC? SO WE ESCALATE IT?)
-    # capture plant: he summarises EIC of individual components into a TotalInstalledCost. But EIC includes condingencies already!(Ali) And in Ali, TIC=TDC, but misses TOC/TASC escalation
-    # liquefaction plant: estimated TotalDirectCost by scaling from Deng. Then multiply by contingeiny(Deng) to get TIC.
-    # issue: they already include congingencies, but I want this as an uncertainty!
-    # solution: open ApepndixA => to see the equipment, AppendixB => their cost functions, open Ali2019 => equipment factors
-
-    # We can add TOC: up to +20%of TDC (NETL, https://www.osti.gov/servlets/purl/1567736). This includes start-up, working/inventory capital, land, securing financing
-    # => introduce 1 uncertainty 0-20%
-    # We can add TASC, but this requires WACC etc. This tells us how the capital is incurred during the expenditure period, and how it escalates.
-    # => introduce 3 uncertainties: i=capital escalation rate, dy=years of capital expenditure, WACC=capital distribution
-    # This could work... but maybe this is incompatible with the annualization?
-    
     # FOAK: we can add system contingenciy of 1st, 2nd, 3rd plant (towards). Let's treat HPC as NOAK standalone, but FOAK when systemintegrated.
     
     # ADD SITE-TEA
