@@ -9,7 +9,7 @@ from sklearn.multioutput import MultiOutputRegressor
 from sklearn.linear_model import LinearRegression
 
 # DEFINE MY INPUT DATA AND REGRESSIONS OF ASPEN DATA
-plant_data = pd.read_csv("plant_data_test.csv", sep=";", decimal=',')
+plant_data = pd.read_csv("plant_data.csv", sep=";", decimal=',')
 print(plant_data.head())
 
 W2E_data = pd.read_csv("W2E.csv", sep=";", decimal=',')
@@ -75,58 +75,50 @@ for index, row in plant_data.iterrows():
     MEA.dTmin = 7
 
     Qrecovered = MEA.available_heat(composite_curve, Tsupp, Tlow)
-    CHP.Qdh += round(Qrecovered/1000)
+    CHP.Qdh += round(Qrecovered)
     CHP.print_info()
     MEA.plot_hexchange()
 
-    # DETERMINE CAPEX                                                                     <--- BELOW CALCS NEEDS TO TURN INTO MEA.methods()
+    # DETERMINE CAPEX 
     # TODO: determine social vs private cost (maybe cascade? how does this increase the costs for end-consumers?)(compare with Levinh, 2019)(EU fines for non-compliance?)
-    # NPV = sum(t=1->n)( cash(t)/(1+i)^t )
+    # NPV = sum(t=1->n)( cash(t)/(1+i)^t ) #(https://link.springer.com/article/10.1007/s10973-021-10833-z)
 
-    alpha = 6.12
-    beta = 0.6336
-    CAPEX = alpha*(CHP.Vfg/3600)**beta # [MEUR] (Eliasson, 2021) who has cost year = 2016 #TODO: Need T,p of fluegases to convert to Nm3 , before sending to
-    CEPCI = 600/550 #(https://link.springer.com/article/10.1007/s10973-021-10833-z)
-    CAPEX *= CEPCI              # This is time-adjusted TDC=TIC
-    fixedOPEX = 0.06 * CAPEX #MEUR/yr
+    economic_assumptions = {
+    'alpha': 6.12,
+    'beta': 0.6336,
+    'CEPCI': 600/550,
+    'fixed': 0.06,
+    'ownercost': 0.2,
+    'WACC': 0.05,
+    'yexpenses': 3,
+    'rescalation': 0.03,
+    'i': 0.075,
+    't': 25,
+    'celc': 40,
+    'cheat': 15,
+    'duration': 8000,
+    'cMEA': 2
+    }
 
-    owners_cost = 0.2
-    CAPEX *= 1+owners_cost      # This is TOC
+    CAPEX, aCAPEX, fixedOPEX = MEA.CAPEX_costs(economic_assumptions, escalate=True)
+    energyOPEX, otherOPEX = MEA.OPEX_costs(economic_assumptions, Plost, Qlost, Qrecovered)
 
-    WACC = 0.05
-    yexpenses = 3
-    rescalation = 0.03
-
-    escalation = 0
-    for n in range(1,yexpenses+1):
-        escalation += (1+rescalation)**(n-1)*(1/yexpenses)
-    cfunding = 0
-    for n in range(1,yexpenses+1):
-        cfunding += WACC*(yexpenses-n+1)*(1+rescalation)**(n-1)*(1/yexpenses)
-    CAPEX *= escalation+cfunding # This is TASC
-
-    i = 0.075
-    t = 25
-    annualization = (i*(1+i)**t )/((1+i)**t-1) 
-    aCAPEX = annualization*CAPEX #MEUR/yr
-
-    # DETERMINE var-OPEX
-    celc = 40
-    cheat = 15
-    duration = 8000
-    energyOPEX = (Plost*celc + Qlost*cheat)*duration *10**-6 
-    cMEA = 2 # EUR/kg
-    otherOPEX = MEA.get("Makeup")*cMEA *3600*duration *10**-6 
-
-
-    # SYNTHESIZE AND PLOT
+    # SYNTHESIZE KPIs AND PLOT
     cost_labels = ['aCAPEX', 'fixedOPEX', 'energyOPEX', 'otherOPEX']
     costs = [aCAPEX, fixedOPEX, energyOPEX, otherOPEX] #MEUR/yr
-    costs_specific = [x*10**6 / (CHP.mCO2*duration) for x in costs]     #EUR/tCO2
+    costs_specific = [x*10**6 / (CHP.mCO2*economic_assumptions['duration']) for x in costs]     #EUR/tCO2
 
-    emission_intensity = 0.355*CHP.Qfuel / (CHP.Qdh+CHP.Qfgc+CHP.P)     #tCO2/MWhoutput, NOTE: these are total emissions produced, only 90% of these are captured.
-    consumer_cost = emission_intensity * 0.9 * sum(costs_specific)      #EUR/MWhoutput
-    print(consumer_cost)
+    emission_intensity = 0.355*CHP.Qfuel / (CHP.Qdh+CHP.Qfgc+CHP.P)     #tCO2/MWhoutput, NOTE: these are total emissions produced, 
+    consumer_cost = emission_intensity * 0.9 * sum(costs_specific)      #EUR/MWhoutput, NOTE: only 90% of these are captured and should be paid for by consumers
+
+    energy_deficit = (Plost + (Qlost - Qrecovered))*economic_assumptions['duration']
+    print(Plost)
+    fuel_wasted = (Plost + (Qlost - Qrecovered))/(CHP.Qfuel)
+    print('Cost of capture: ', round(sum(costs_specific)), 'EUR/tCO2')
+    print('Consumer added cost: +', round(consumer_cost), 'EUR/MWh')
+    print('Energy deficit: ', round(energy_deficit/1000), 'GWh/yr')
+    print('Fuel wasted: ', round(fuel_wasted*100,1), '%, but in LHV! Higher if we compare HHV of fuel, which we should due to fgc being used.. or wait fgc is not used in this :)')
+    print('Small CHP: energy penalty not working, check how much MW is drawn to reboiler!')
 
 
     # ADD COST ESCALATION (READ ELIASON: IS THIS ABSOLUTE CAPEX=TPC? SO WE ESCALATE IT?)

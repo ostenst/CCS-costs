@@ -179,6 +179,7 @@ class MEA_plant:
         self.composite_curve = None
         self.dTmin = None
         self.QTdict = None
+        self.economics = None
 
     def get(self, parameter):
         return self.data[parameter].values[0]
@@ -298,7 +299,33 @@ class MEA_plant:
         }
 
         Qrecovered = (Qpinch-Qsupp) + (Qlow-Qpinch)
-        return Qrecovered
+        return Qrecovered/1000  #MW
+
+    def CAPEX_costs(self, economic_assumptions, escalate=True):
+        self.economics = economic_assumptions
+        X = economic_assumptions
+
+        CAPEX = X['alpha'] * (self.host.Vfg / 3600) ** X['beta']  #[MEUR] (Eliasson, 2021) who has cost year=2016. Nm3 ~= m3 for our flue gases!
+        CAPEX *= X['CEPCI']                                         #NOTE: this CAPEX represents TDC. We may or may not add escalation to this.
+        fixedOPEX = X['fixed'] * CAPEX                              #% of TDC
+
+        if escalate:
+            CAPEX *= 1 + X['ownercost']
+            escalation = sum((1 + X['rescalation']) ** (n - 1) * (1 / X['yexpenses']) for n in range(1, X['yexpenses'] + 1))
+            cfunding = sum(X['WACC'] * (X['yexpenses'] - n + 1) * (1 + X['rescalation']) ** (n - 1) * (1 / X['yexpenses']) for n in range(1, X['yexpenses'] + 1))
+            CAPEX *= escalation + cfunding                      #This is TASC.
+            #TODO: we can include system_contingency if we consider HPC a FOAK. This could be +0-30% maybe? (Towards, Rubin)
+
+        annualization = (X['i'] * (1 + X['i']) ** X['t']) / ((1 + X['i']) ** X['t'] - 1)
+        aCAPEX = annualization * CAPEX                      #[MEUR/yr]
+
+        return CAPEX, aCAPEX, fixedOPEX
+    
+    def OPEX_costs(self, economic_assumptions, Plost, Qlost, Qrecovered):
+        X = economic_assumptions
+        energyOPEX = (Plost * X['celc'] + (Qlost - Qrecovered) * X['cheat']) * X['duration'] * 10 ** -6
+        otherOPEX = self.get("Makeup") * X['cMEA'] * 3600 * X['duration'] * 10 ** -6
+        return energyOPEX, otherOPEX
     
     def plot_streams(self, stream_data, show=False):
         plt.figure(figsize=(10, 8))
