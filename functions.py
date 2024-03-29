@@ -45,7 +45,7 @@ class State:
         plt.annotate( str(self)+': '+str(round(self.p,2))+' bar' if pressure else str(self), (self.s, self.T), textcoords="offset points", xytext=(5,5))
 
 class CHP_plant:
-    def __init__(self, name, fuel=None, Qdh=0, P=0, Qfgc=0, ybirth=0, Tsteam=0, psteam=0, Qfuel=0, Vfg=0, mCO2=0):
+    def __init__(self, name, fuel=None, Qdh=0, P=0, Qfgc=0, ybirth=0, Tsteam=0, psteam=0):
         self.name = name
         self.fuel = fuel
         self.Qdh = Qdh
@@ -55,11 +55,13 @@ class CHP_plant:
         self.Tsteam = Tsteam
         self.psteam = psteam
         self.technology_assumptions = None
-        self.Qfuel = Qfuel
-        self.Vfg = Vfg
-        self.fCO2 = 0
-        self.mCO2 = mCO2
+
+        self.Qfuel = None
+        self.Vfg = None
+        self.fCO2 = None
+        self.mCO2 = None
         self.states = None
+        self.reboiler_steam = None
 
     def print_info(self):
         table_format = "{:<20} {:<10} {:<10} {:<10} {:<10} {:<10}"
@@ -67,7 +69,7 @@ class CHP_plant:
         print(table_format.format("-" * 20, "-" * 10, "-" * 10, "-" * 10, "-" * 10, "-" * 10))
         print(table_format.format(self.name, round(self.P), round(self.Qdh+self.Qfgc), round(self.Qfuel), self.fuel, round(self.Vfg)))
 
-    def estimate_performance(self, plotting=False):
+    def estimate_rankine(self, plotting=False):
         Ptarget = self.P
         Qdh = self.Qdh
         A = State("A", self.psteam, self.Tsteam)
@@ -101,22 +103,23 @@ class CHP_plant:
         else:
             raise ValueError("One or more of the variables (msteam, Pestimated, Qfuel, pcond_guess) is not positive.")
         
-    def burn_fuel(self):
-        X = self.technology_assumptions
+    def burn_fuel(self, technology_assumptions):
+        # TODO: Check method for fuel=>flue gas. Also turn emission factors etc. into uncertainties X, assumptions.
+        self.technology_assumptions = technology_assumptions
 
-        self.Qfuel *= 1 / X["eta_boiler"]
+        self.Qfuel *= 1 / technology_assumptions["eta_boiler"]
 
         if self.fuel == "B":
-            self.fCO2 = X["fCO2_B"]
+            self.fCO2 = technology_assumptions["fCO2_B"]
         elif self.fuel == "W":
-            self.fCO2 = X["fCO2_W"]
+            self.fCO2 = technology_assumptions["fCO2_W"]
 
         self.mCO2 = self.Qfuel * 0.355  # [tCO2/h]
         self.Vfg = 2000000 / 110 * self.mCO2 / (self.fCO2 / 0.04)  # [m3/h]
 
         return self.Vfg, self.fCO2
     
-    def plot_plant(self, capture_states=None, show=False):
+    def plot_plant(self, show=False):
         A,B,C,D = self.states
         T_start = 0.01
         T_end = 373.14
@@ -151,8 +154,8 @@ class CHP_plant:
         draw_line(D, State(" ", self.psteam, satV=True), color='b')
         draw_line(State(" ", self.psteam, satV=True), A, color='b')
 
-        if capture_states != None:
-            a,d = capture_states
+        if self.reboiler_steam != None:
+            a,d = self.reboiler_steam
             a.plot(pressure=True)
             d.plot()
             draw_line(a, d, color='cornflowerblue')
@@ -188,8 +191,8 @@ class CHP_plant:
         Qlost = self.Qdh - Qnew
         self.Qdh = Qnew
 
-        reboiler_steam = [a,d]
-        return Plost, Qlost, reboiler_steam
+        self.reboiler_steam = [a,d]
+        return Plost, Qlost
 
 class MEA_plant:
     def __init__(self, host_plant):
@@ -223,7 +226,7 @@ class MEA_plant:
         self.data = predicted_df
         return 
 
-    def identify_streams(self, consider_dcc):
+    def select_streams(self, consider_dcc):
         considered_streams = ['wash', 'strip', 'lean', 'int2', 'int1', 'dhx', 'dry', 'rcond', 'rint', 'preliq'] # For CHPs
         if consider_dcc:
             considered_streams.append('dcc') # For industrial cases with hot flue gases that first need to be cooled before entering the amine absorber

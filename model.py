@@ -45,10 +45,10 @@ for index, row in plant_data.iterrows():
     "Tlow": 38,
     "dTmin": 7,
     }
-    CHP.technology_assumptions = technology_assumptions
     
-    Vfg, fCO2 = CHP.burn_fuel() #LHV! Är det 10-12MJ/kg? (Johanna), kanske 8 om fuktigare
+    Vfg, fCO2 = CHP.burn_fuel(technology_assumptions) #LHV! Är det 10-12MJ/kg? (Johanna), kanske 8 om fuktigare
     CHP.print_info()
+    CHP.plot_plant()
 
     # ESTIMATE SIZE OF MEA PLANT AND THE ENERGY PENALTY
     MEA = MEA_plant(CHP)
@@ -58,17 +58,15 @@ for index, row in plant_data.iterrows():
     elif CHP.fuel == "B":
         print("Aspen data not available for bio-chip fired")
 
-    Plost, Qlost, reboiler_steam = CHP.energy_penalty(MEA)
+    Plost, Qlost = CHP.energy_penalty(MEA)
     CHP.print_info()
-
     CHP.plot_plant()
-    CHP.plot_plant(capture_states=reboiler_steam)
 
     # RECOVER EXCESS HEAT TO DH
     if CHP.fuel == "W" or CHP.fuel == "B":  # Arbitrary before industrial cases are added
         consider_dcc = False
 
-    stream_data = MEA.identify_streams(consider_dcc)
+    stream_data = MEA.select_streams(consider_dcc)
     composite_curve = MEA.merge_heat(stream_data)
     MEA.plot_streams(stream_data)
 
