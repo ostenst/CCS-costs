@@ -87,6 +87,9 @@ def lake_problem(
 
 if __name__ == "__main__":
     ema_logging.log_to_stderr(ema_logging.INFO)
+    # NOTE: I should construct a unique function= for each plant. This could be done by importing my model(), and then below I just modify it slightly to make it unique:
+    # CCS_function = CCS_function(uniqueCHP)
+    # then send this CCS_function to the RDMModel()
 
     # instantiate the model
     lake_model = Model("lakeproblem", function=lake_problem)
@@ -102,7 +105,7 @@ if __name__ == "__main__":
     ]
 
     # set levers, one for each time step
-    lake_model.levers = [RealParameter(str(i), 0, 0.1) for i in range(lake_model.time_horizon)]
+    lake_model.levers = [RealParameter(str(i), 0, 0.1) for i in range(lake_model.time_horizon)] #these show up as columns in the experiments csv... one collection of sampled levers = one policy!
 
     # specify outcomes
     lake_model.outcomes = [
@@ -113,7 +116,7 @@ if __name__ == "__main__":
     ]
 
     # override some of the defaults of the model
-    lake_model.constants = [Constant("alpha", 0.41), Constant("nsamples", 150)] #these show up as columns in the experiments csv... one collection of sampled levers = one policy!
+    lake_model.constants = [Constant("alpha", 0.41), Constant("nsamples", 150)] 
 
     # generate some random policies by sampling over levers
     n_scenarios = 100
