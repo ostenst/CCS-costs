@@ -55,7 +55,8 @@ class CHP_plant:
         self.Tsteam = Tsteam
         self.psteam = psteam
         self.technology_assumptions = None
-
+        
+        self.Qboiler = None
         self.Qfuel = None
         self.Vfg = None
         self.fCO2 = None
@@ -87,10 +88,14 @@ class CHP_plant:
             Pestimated = msteam*(A.h-B.h)
             i += 1
         if i == max_iterations:
+            print("A", A)
+            print("B", B)
+            print("C", C)
             Pestimated = None
+            raise ValueError("Couldn't estimate Rankine cycle!")
 
-        Qfuel = msteam*(A.h-C.h)
-        self.Qfuel = Qfuel
+        Qboiler = msteam*(A.h-C.h)
+        self.Qboiler = Qboiler
         self.P = Pestimated
         D = State("D", self.psteam, satL=True)
         self.states = A,B,C,D
@@ -98,16 +103,16 @@ class CHP_plant:
         if plotting == True:
             self.plot_plant(A,B,C,D)
 
-        if msteam is not None and Pestimated is not None and Qfuel > 0 and pcond_guess > 0:
+        if msteam is not None and Pestimated is not None and Qboiler > 0 and pcond_guess > 0:
             return
         else:
-            raise ValueError("One or more of the variables (msteam, Pestimated, Qfuel, pcond_guess) is not positive.")
+            raise ValueError("One or more of the variables (msteam, Pestimated, Qboiler, pcond_guess) is not positive.")
         
     def burn_fuel(self, technology_assumptions):
         # TODO: Check method for fuel=>flue gas. Also turn emission factors etc. into uncertainties X, assumptions.
         self.technology_assumptions = technology_assumptions
 
-        self.Qfuel *= 1 / technology_assumptions["eta_boiler"]
+        self.Qfuel = 1 / technology_assumptions["eta_boiler"] * self.Qboiler
 
         if self.fuel == "B":
             self.fCO2 = technology_assumptions["fCO2_B"]
@@ -166,13 +171,14 @@ class CHP_plant:
     
     def energy_penalty(self, MEA):
         dTreb = self.technology_assumptions["dTreb"]
-        eta_boiler = self.technology_assumptions["eta_boiler"]
 
         A,B,C,D = self.states
-        mtot = self.Qfuel*eta_boiler*1000 / (A.h-C.h) #WE HAVE TOO MUCH MASS; BECAUSE WE USE THE UPDATED QFUEL
+        mtot = self.Qboiler*1000 / (A.h-C.h) #WE HAVE TOO MUCH MASS; BECAUSE WE USE THE UPDATED QFUEL
+        print(self.Qfuel)
+        print(self.Qboiler)
         TCCS = MEA.get("Treb") + dTreb
         pCCS = steamTable.psat_t(TCCS)
-        Ta = steamTable.t_ps(pCCS,A.s)
+        # Ta = steamTable.t_ps(pCCS,A.s)
 
         a = State("a",pCCS,s=A.s,mix=True) #NOTE: Debug? If mixed! You need to add a case if we are outside (in gas phase)
         d = State("d",pCCS,satL=True)
@@ -218,6 +224,7 @@ class MEA_plant:
     
         # print("Estimated flue gas volume: ", self.host.Vfg, " [m3/h], or ", self.host.Vfg/3600*0.8, " [kg/s]" )
         new_input = pd.DataFrame({'CO2%': [self.host.fCO2*100], 'Flow': [self.host.Vfg/3600*0.8]})  # Fraction of CO2=>percentage, and massflow [kg/s], of flue gases
+
         predicted_y = model.predict(new_input)
         predicted_df = pd.DataFrame(predicted_y, columns=y.columns)
 

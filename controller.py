@@ -80,17 +80,21 @@ if __name__ == "__main__":
             RealParameter("WACC", 0.045, 0.055),
             IntegerParameter("yexpenses", 2, 4),
             RealParameter("rescalation", 0.027, 0.033),
-            RealParameter("i", 0.0675, 0.0825),
+            # RealParameter("i", 0.0675, 0.0825),
             IntegerParameter("t", 23, 27),
             RealParameter("celc", 36, 44),
             RealParameter("cheat", 13.5, 16.5),
             RealParameter("duration", 7200, 8800),
             RealParameter("cMEA", 1.8, 2.2),
         ]
+        model.levers = [
+            RealParameter("i", 0.05, 0.10),
+        ]
         model.outcomes = [
             ScalarOutcome("cost_specific", ScalarOutcome.MINIMIZE),
+            ScalarOutcome("consumer_cost", ScalarOutcome.MINIMIZE),
+            ScalarOutcome("fuel_penalty", ScalarOutcome.MINIMIZE),
         ]
-        print("Issues now, is this not a scalar outcome???... maybe test to move W2E_data etc to Model.py, to isolate issues")
         model.constants = [
             Constant("CHP", CHP), # Overwrite the default CHP=None value
             Constant("W2E_regression", W2E_regression),
@@ -99,8 +103,23 @@ if __name__ == "__main__":
 
         # Now what?
         n_scenarios = 10
-        n_policies = 1
+        n_policies = 3
 
-        print("THis works")
-        results = perform_experiments(model, n_scenarios, uncertainty_sampling = Samplers.LHS, lever_sampling = Samplers.LHS)
+        results = perform_experiments(model, n_scenarios, n_policies, uncertainty_sampling = Samplers.LHS, lever_sampling = Samplers.LHS)
         print(results)
+
+        experiments, outcomes = results
+    
+        # Convert experiments to a DataFrame
+        df_experiments = pd.DataFrame(experiments)
+        df_experiments.to_csv("experiments.csv", index=False)
+
+        data = pd.DataFrame(outcomes)
+        data.to_csv("outcomes.csv", index=False)
+
+        # data["policy"] = experiments["policy"] #add the policy-information of my experiments, to the outcomes
+        # sns.pairplot(data, hue="policy", vars=list(outcomes.keys()))
+        data["i"] = experiments["i"] #add the policy-information of my experiments, to the outcomes
+        sns.pairplot(data, hue="i", vars=list(outcomes.keys()))
+
+        plt.show()
