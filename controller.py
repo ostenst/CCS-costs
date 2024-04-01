@@ -15,6 +15,8 @@ from SALib.analyze import sobol
 from ema_workbench import Samplers
 from ema_workbench.em_framework.salib_samplers import get_SALib_problem
 from ema_workbench.analysis import feature_scoring
+from ema_workbench.analysis import prim
+
 
 from ema_workbench import (
     Model,
@@ -33,7 +35,7 @@ from model import CCS_CHP
 if __name__ == "__main__":
 
     # Read data and fit regressors
-    plant_data = pd.read_csv("plant_data.csv", sep=";", decimal=',')
+    plant_data = pd.read_csv("plant_data_test.csv", sep=";", decimal=',')
     print(plant_data.head())
 
     W2E_data = pd.read_csv("W2E.csv", sep=";", decimal=',')
@@ -97,10 +99,11 @@ if __name__ == "__main__":
             Constant("W2E_regression", W2E_regression),
             Constant("W2E_data", W2E_data),
         ]
+        ema_logging.log_to_stderr(ema_logging.INFO)
 
         # Perform the experiments (check Sobol requirement for the number of scenarios)
         print(f"Exploring outcomes of implementing CCS at {CHP.name}:")
-        n_scenarios = 100
+        n_scenarios = 500
         n_policies = 4
 
         results = perform_experiments(model, n_scenarios, n_policies, uncertainty_sampling = Samplers.LHS, lever_sampling = Samplers.LHS)
@@ -129,11 +132,11 @@ if __name__ == "__main__":
 
         # sobol_stats, s2, s2_conf = analyze(model, results, "cost_specific")
         # print(sobol_stats.head(20))
-        sa_results = perform_experiments(model, scenarios=100, uncertainty_sampling=Samplers.SOBOL)
-        experiments, outcomes = sa_results
+        sa_results = perform_experiments(model, scenarios=50, uncertainty_sampling=Samplers.SOBOL)
+        experiments, sa_outcomes = sa_results
 
         problem = get_SALib_problem(model.uncertainties)
-        Si = sobol.analyze(problem, outcomes["cost_specific"], calc_second_order=True, print_to_console=False)
+        Si = sobol.analyze(problem, sa_outcomes["cost_specific"], calc_second_order=True, print_to_console=False)
         scores_filtered = {k: Si[k] for k in ["ST", "ST_conf", "S1", "S1_conf"]}
         Si_df = pd.DataFrame(scores_filtered, index=problem["names"])
 
@@ -147,4 +150,38 @@ if __name__ == "__main__":
         fig.set_size_inches(8, 6)
         fig.subplots_adjust(bottom=0.3)
 
+        # Perform SD:
+        x = df_experiments.iloc[:, 0:21]
+        y = outcomes["cost_specific"] > 70
+        # y = data.iloc[:, 15].values
+        prim_alg = prim.Prim(x, y, threshold=0.8, peel_alpha=0.1)
+        box1 = prim_alg.find_box()
+        box1.show_tradeoff()
+        box1.inspect(2, style="graph")
+        box1.inspect(4, style="graph")
+        box1.inspect(6, style="graph")
+
+        y = outcomes["fuel_penalty"] < 0.13
+        # y = data.iloc[:, 15].values
+        prim_alg = prim.Prim(x, y, threshold=0.8, peel_alpha=0.1)
+        box1 = prim_alg.find_box()
+        box1.show_tradeoff()
+        box1.inspect(2, style="graph")
+        box1.inspect(4, style="graph")
+        box1.inspect(6, style="graph")
+
+        plt.figure(figsize=(8, 10))
+        scatter = plt.scatter(df_experiments["alpha"], df_experiments["duration"], c=outcomes["cost_specific"])
+        plt.xlabel("Input: alpha [-]")
+        plt.ylabel("Input: duration [h/yr]")
+        cbar = plt.colorbar(scatter)
+        cbar.set_label("Output: specific cost [EUR/tCO2]")
+
+        plt.figure(figsize=(8, 10))
+        scatter = plt.scatter(df_experiments["Tlow"], outcomes["cost_specific"], c=outcomes["fuel_penalty"])
+        plt.xlabel("Input: Treturn DH [C]")
+        plt.ylabel("Output: specific cost [EUR/tCO2]")
+        cbar = plt.colorbar(scatter)
+        cbar.set_label("Output: fuel penalty [-]")
+        
 plt.show()

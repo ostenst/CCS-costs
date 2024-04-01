@@ -125,7 +125,7 @@ def CCS_CHP(
 
 if __name__ == "__main__":
     # DEFINE MY INPUT DATA AND REGRESSIONS OF ASPEN DATA
-    plant_data = pd.read_csv("plant_data.csv", sep=";", decimal=',')
+    plant_data = pd.read_csv("plant_data_test.csv", sep=";", decimal=',')
     print(plant_data.head())
 
     W2E_data = pd.read_csv("W2E.csv", sep=";", decimal=',')
