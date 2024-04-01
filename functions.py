@@ -8,6 +8,9 @@ import matplotlib.pyplot as plt
 from pyXSteam.XSteam import XSteam
 from sklearn.multioutput import MultiOutputRegressor
 from sklearn.linear_model import LinearRegression
+from ema_workbench.em_framework import get_SALib_problem
+from SALib.analyze import sobol
+
 
 steamTable = XSteam(XSteam.UNIT_SYSTEM_MKS)
 class State:
@@ -88,10 +91,7 @@ class CHP_plant:
             Pestimated = msteam*(A.h-B.h)
             i += 1
         if i == max_iterations:
-            print("A", A)
-            print("B", B)
-            print("C", C)
-            Pestimated = None
+            print(self.name)
             raise ValueError("Couldn't estimate Rankine cycle!")
 
         Qboiler = msteam*(A.h-C.h)
@@ -143,7 +143,7 @@ class CHP_plant:
         plt.ylim(0, 600)
         plt.xlabel('s [kJ/kgC]')
         plt.ylabel('T [C]')
-        plt.title('s,T cycle of CHP')
+        plt.title(f's,T cycle of CHP ({self.name})')
         plt.grid(True)
 
         A.plot(pressure=True)
@@ -174,12 +174,11 @@ class CHP_plant:
 
         A,B,C,D = self.states
         mtot = self.Qboiler*1000 / (A.h-C.h) #WE HAVE TOO MUCH MASS; BECAUSE WE USE THE UPDATED QFUEL
-        print(self.Qfuel)
-        print(self.Qboiler)
+        
         TCCS = MEA.get("Treb") + dTreb
         pCCS = steamTable.psat_t(TCCS)
         # Ta = steamTable.t_ps(pCCS,A.s)
-
+ 
         a = State("a",pCCS,s=A.s,mix=True) #NOTE: Debug? If mixed! You need to add a case if we are outside (in gas phase)
         d = State("d",pCCS,satL=True)
         mCCS = MEA.get("Qreb") / (a.h-d.h)
@@ -189,13 +188,17 @@ class CHP_plant:
         for Wi in ["Wpumps","Wcfg","Wc1","Wc2","Wc3","Wrefr1","Wrefr2","Wrecomp"]:
             W += MEA.get(Wi)
 
-        Pnew = mtot*(A.h-a.h) + mB*(a.h-B.h) - W #Subtract pump, comp work etc.
-        Plost = self.P - Pnew/1000
+        if a.p > B.p: # Check Rankine plots, the new power output depends on the pressures of pDH and pCCS
+            Pnew = mtot*(A.h-a.h) + mB*(a.h-B.h) - W #Subtract pump, comp work etc.
+        else: 
+            Pnew = mtot*(A.h-B.h) + mCCS*(B.h-a.h) - W
+
+        Plost = (mtot*(A.h-B.h) - Pnew)/1000
         self.P = Pnew/1000
 
-        Qnew = mB*(B.h-C.h)/1000
-        Qlost = self.Qdh - Qnew
-        self.Qdh = Qnew
+        Qnew = mB*(B.h-C.h)
+        Qlost = (mtot*(B.h-C.h) - Qnew)/1000
+        self.Qdh = Qnew/1000
 
         self.reboiler_steam = [a,d]
         return Plost, Qlost
@@ -303,7 +306,7 @@ class MEA_plant:
         # Finding low and high points:
         def linear_interpolation(curve, ynew):
             # Find the nearest points
-            y_values = [point[1] for point in curve]
+            y_values = [point[1] for point in curve]    # NOTE: I think this is buggy for unfeasible composite curves, i.e. when some Qcool approach zero and we have weirds "kinks" in the composite curve
             nearest_index = min(range(len(y_values)), key=lambda i: abs(y_values[i] - ynew))
             x1, y1 = curve[nearest_index]
             if nearest_index == 0:
@@ -399,7 +402,7 @@ class MEA_plant:
         plt.plot([Qpinch, Qsupp], [Tpinch, Tsupp], marker='x', color='blue', label='Qhighgrade')
         plt.plot([Qlow, composite_curve[-1][0]], [20, 15], marker='o', color='#0000FF', label='Cooling water') # NOTE: hard-coded CW temps.
 
-        plt.text(26000, 55, f'dTmin={self.dTmin} C', color='black', fontsize=12, ha='center', va='center')
+        plt.text(26000, 55, f'dTmin={round(self.dTmin,2)} C', color='black', fontsize=12, ha='center', va='center')
         plt.text(26000, 115, f'Qreb={round(self.get("Qreb")/1000)} MW', color='#a100ba', fontsize=12, ha='center', va='center')       
         plt.text(5000, 60, f'Qhighgrade={round((Qpinch-Qsupp)/1000)} MW', color='#0000FF', fontsize=12, ha='center', va='center')
         plt.text(5000, 40, f'Qlowgrade={round((Qlow-Qpinch)/1000)} MW', color='#069AF3', fontsize=12, ha='center', va='center')
@@ -412,3 +415,23 @@ class MEA_plant:
         if show:
             plt.show()
         return
+
+def analyze(model, results, outcome_of_interest):
+    """analyze results using SALib sobol, returns a dataframe"""
+
+    _, outcomes = results
+    ooi = outcome_of_interest
+
+    problem = get_SALib_problem(model.uncertainties)
+    y = outcomes[ooi]
+    # NOTE: This method requires that y.size % (2 * D + 2) == 0, where D=number of variables=length(uncertainties) e.g. 20 uncertainties
+    sobol_indices = sobol.analyze(problem, y, num_resamples=10000)
+    sobol_stats = {key: sobol_indices[key] for key in ["ST", "ST_conf", "S1", "S1_conf"]}
+    sobol_stats = pd.DataFrame(sobol_stats, index=problem["names"])
+    sobol_stats.sort_values(by="ST", ascending=False)
+    s2 = pd.DataFrame(sobol_indices["S2"], index=problem["names"], columns=problem["names"])
+    s2_conf = pd.DataFrame(
+        sobol_indices["S2_conf"], index=problem["names"], columns=problem["names"]
+    )
+
+    return sobol_stats, s2, s2_conf

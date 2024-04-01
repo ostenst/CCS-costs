@@ -66,7 +66,6 @@ def CCS_CHP(
         'duration': duration,
         'cMEA': cMEA
     }
-    CHP_old = CHP
 
     # Size MEA plant and integrate it
     Vfg, fCO2 = CHP.burn_fuel(technology_assumptions)
@@ -78,8 +77,6 @@ def CCS_CHP(
         print("Aspen data not available for bio-chip fired")
 
     Plost, Qlost = CHP.energy_penalty(MEA)
-    print("LOST E", Plost, Qlost, round(MEA.get("Qreb")/1000))
-    print("I think the AspenModel() has correct E penalty, but not my Plost and Qlost... they are negative sometimes :O, and don't add up to the Qreb in Aspen")
 
     # Recover excess heat
     if CHP.fuel == "W" or CHP.fuel == "B":  # Arbitrary before industrial cases are added
@@ -105,7 +102,19 @@ def CCS_CHP(
     energy_deficit = (Plost + (Qlost - Qrecovered))*economic_assumptions['duration']            # MWh/yr
     fuel_penalty = (Plost + (Qlost - Qrecovered))/(CHP.Qfuel)                                   # % of input fuel used for capture
 
-    CHP = CHP_old
+    # if fuel_penalty < 0: # NOTE: Include this criteria in the real analysis later
+    #     print(" ")
+    #     print("These assumptions are unfeasible:")
+    #     print(Plost, Qlost, Qrecovered)
+    #     print(CHP.Vfg/3600*0.8, " kg/s")
+    #     print(MEA.data.head())
+    #     for key, value in technology_assumptions.items():
+    #         print(key, ":", value)
+    #     CHP.plot_plant()
+    #     MEA.plot_hexchange()
+    #     plt.show()
+    #     raise ValueError
+
     if MultiObjective:
         return CAPEX, costs, costs_specific, cost_specific, consumer_cost, energy_deficit, fuel_penalty
     else:
