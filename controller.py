@@ -103,7 +103,7 @@ if __name__ == "__main__":
 
         # Perform the experiments (check Sobol requirement for the number of scenarios)
         print(f"Exploring outcomes of implementing CCS at {CHP.name}:")
-        n_scenarios = 500
+        n_scenarios = 50
         n_policies = 4
 
         results = perform_experiments(model, n_scenarios, n_policies, uncertainty_sampling = Samplers.LHS, lever_sampling = Samplers.LHS)
@@ -122,53 +122,53 @@ if __name__ == "__main__":
         data["beta"] = experiments["beta"] #add the policy-information of my experiments, to the outcomes
         sns.pairplot(data, hue="beta", vars=list(outcomes.keys()))
 
-        # Perform SA
-        print(f"\nPerforming Sobol SA for {CHP.name}:")
-        plt.figure(figsize=(6, 70))
-        x = experiments
-        y = outcomes
-        fs = feature_scoring.get_feature_scores_all(x, y)
-        sns.heatmap(fs, cmap="viridis", annot=True)
+        # # Perform SA
+        # print(f"\nPerforming Sobol SA for {CHP.name}:")
+        # plt.figure(figsize=(6, 70))
+        # x = experiments
+        # y = outcomes
+        # fs = feature_scoring.get_feature_scores_all(x, y)
+        # sns.heatmap(fs, cmap="viridis", annot=True)
 
-        # sobol_stats, s2, s2_conf = analyze(model, results, "cost_specific")
-        # print(sobol_stats.head(20))
-        sa_results = perform_experiments(model, scenarios=50, uncertainty_sampling=Samplers.SOBOL)
-        experiments, sa_outcomes = sa_results
+        # # sobol_stats, s2, s2_conf = analyze(model, results, "cost_specific")
+        # # print(sobol_stats.head(20))
+        # sa_results = perform_experiments(model, scenarios=5, uncertainty_sampling=Samplers.SOBOL)
+        # experiments, sa_outcomes = sa_results
 
-        problem = get_SALib_problem(model.uncertainties)
-        Si = sobol.analyze(problem, sa_outcomes["cost_specific"], calc_second_order=True, print_to_console=False)
-        scores_filtered = {k: Si[k] for k in ["ST", "ST_conf", "S1", "S1_conf"]}
-        Si_df = pd.DataFrame(scores_filtered, index=problem["names"])
+        # problem = get_SALib_problem(model.uncertainties)
+        # Si = sobol.analyze(problem, sa_outcomes["cost_specific"], calc_second_order=True, print_to_console=False)
+        # scores_filtered = {k: Si[k] for k in ["ST", "ST_conf", "S1", "S1_conf"]}
+        # Si_df = pd.DataFrame(scores_filtered, index=problem["names"])
 
-        sns.set_style("white")
-        fig, ax = plt.subplots(1)
+        # sns.set_style("white")
+        # fig, ax = plt.subplots(1)
 
-        indices = Si_df[["S1", "ST"]]
-        err = Si_df[["S1_conf", "ST_conf"]]
+        # indices = Si_df[["S1", "ST"]]
+        # err = Si_df[["S1_conf", "ST_conf"]]
 
-        indices.plot.bar(yerr=err.values.T, ax=ax, colormap='viridis')
-        fig.set_size_inches(8, 6)
-        fig.subplots_adjust(bottom=0.3)
+        # indices.plot.bar(yerr=err.values.T, ax=ax, colormap='viridis')
+        # fig.set_size_inches(8, 6)
+        # fig.subplots_adjust(bottom=0.3)
 
-        # Perform SD:
-        x = df_experiments.iloc[:, 0:21]
-        y = outcomes["cost_specific"] > 70
-        # y = data.iloc[:, 15].values
-        prim_alg = prim.Prim(x, y, threshold=0.8, peel_alpha=0.1)
-        box1 = prim_alg.find_box()
-        box1.show_tradeoff()
-        box1.inspect(2, style="graph")
-        box1.inspect(4, style="graph")
-        box1.inspect(6, style="graph")
+        # # Perform SD:
+        # x = df_experiments.iloc[:, 0:21]
+        # y = outcomes["cost_specific"] > 70
+        # # y = data.iloc[:, 15].values
+        # prim_alg = prim.Prim(x, y, threshold=0.8, peel_alpha=0.1)
+        # box1 = prim_alg.find_box()
+        # box1.show_tradeoff()
+        # # box1.inspect(2, style="graph")
+        # # box1.inspect(4, style="graph")
+        # # box1.inspect(6, style="graph")
 
-        y = outcomes["fuel_penalty"] < 0.13
-        # y = data.iloc[:, 15].values
-        prim_alg = prim.Prim(x, y, threshold=0.8, peel_alpha=0.1)
-        box1 = prim_alg.find_box()
-        box1.show_tradeoff()
-        box1.inspect(2, style="graph")
-        box1.inspect(4, style="graph")
-        box1.inspect(6, style="graph")
+        # y = outcomes["fuel_penalty"] < 0.13
+        # # y = data.iloc[:, 15].values
+        # prim_alg = prim.Prim(x, y, threshold=0.8, peel_alpha=0.1)
+        # box1 = prim_alg.find_box()
+        # box1.show_tradeoff()
+        # # box1.inspect(2, style="graph")
+        # # box1.inspect(4, style="graph")
+        # # box1.inspect(6, style="graph")
 
         plt.figure(figsize=(8, 10))
         scatter = plt.scatter(df_experiments["alpha"], df_experiments["duration"], c=outcomes["cost_specific"])
