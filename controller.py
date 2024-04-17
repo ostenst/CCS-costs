@@ -35,7 +35,7 @@ from model import CCS_CHP
 if __name__ == "__main__":
 
     # Read data and fit regressors
-    plant_data = pd.read_csv("plant_data_test.csv", sep=";", decimal=',')
+    plant_data = pd.read_csv("plant_data.csv", sep=";", decimal=',')
     print(plant_data.head())
 
     W2E_data = pd.read_csv("W2E.csv", sep=";", decimal=',')
@@ -103,7 +103,7 @@ if __name__ == "__main__":
 
         # Perform the experiments (check Sobol requirement for the number of scenarios)
         print(f"Exploring outcomes of implementing CCS at {CHP.name}:")
-        n_scenarios = 50
+        n_scenarios = 100
         n_policies = 4
 
         results = perform_experiments(model, n_scenarios, n_policies, uncertainty_sampling = Samplers.LHS, lever_sampling = Samplers.LHS)
@@ -132,7 +132,7 @@ if __name__ == "__main__":
 
         # # sobol_stats, s2, s2_conf = analyze(model, results, "cost_specific")
         # # print(sobol_stats.head(20))
-        # sa_results = perform_experiments(model, scenarios=5, uncertainty_sampling=Samplers.SOBOL)
+        # sa_results = perform_experiments(model, scenarios=10, uncertainty_sampling=Samplers.SOBOL)
         # experiments, sa_outcomes = sa_results
 
         # problem = get_SALib_problem(model.uncertainties)

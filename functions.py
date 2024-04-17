@@ -415,23 +415,3 @@ class MEA_plant:
         if show:
             plt.show()
         return
-
-def analyze(model, results, outcome_of_interest):
-    """analyze results using SALib sobol, returns a dataframe"""
-
-    _, outcomes = results
-    ooi = outcome_of_interest
-
-    problem = get_SALib_problem(model.uncertainties)
-    y = outcomes[ooi]
-    # NOTE: This method requires that y.size % (2 * D + 2) == 0, where D=number of variables=length(uncertainties) e.g. 20 uncertainties
-    sobol_indices = sobol.analyze(problem, y, num_resamples=10000)
-    sobol_stats = {key: sobol_indices[key] for key in ["ST", "ST_conf", "S1", "S1_conf"]}
-    sobol_stats = pd.DataFrame(sobol_stats, index=problem["names"])
-    sobol_stats.sort_values(by="ST", ascending=False)
-    s2 = pd.DataFrame(sobol_indices["S2"], index=problem["names"], columns=problem["names"])
-    s2_conf = pd.DataFrame(
-        sobol_indices["S2_conf"], index=problem["names"], columns=problem["names"]
-    )
-
-    return sobol_stats, s2, s2_conf
