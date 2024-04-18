@@ -339,7 +339,7 @@ class MEA_plant:
         self.economics = economic_assumptions
         X = economic_assumptions
 
-        CAPEX = X['alpha'] * (self.host.Vfg / 3600) ** X['beta']  #[MEUR] (Eliasson, 2021) who has cost year=2016. Nm3 ~= m3 for our flue gases!
+        CAPEX = X['alpha'] * (self.host.Vfg / 3600) ** X['beta']  #[MEUR] (Eliasson, 2021) who has cost year=2016. Nm3 ~= m3 for our flue gases! NOTE: THIS IS FOR 13% CO2, generic study
         CAPEX *= X['CEPCI']                                         #NOTE: this CAPEX represents TDC. We may or may not add escalation to this.
         fixedOPEX = X['fixed'] * CAPEX                              #% of TDC
 
