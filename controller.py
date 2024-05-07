@@ -29,21 +29,39 @@ from ema_workbench import (
 )
 from ema_workbench.em_framework.evaluators import Samplers
 from model import CCS_CHP
-
+from scipy.interpolate import LinearNDInterpolator
 
 
 if __name__ == "__main__":
 
     # Read data and fit regressors
-    plant_data = pd.read_csv("plant_data.csv", sep=";", decimal=',')
+    plant_data = pd.read_csv("plants-chip.csv", sep=";", decimal=',')
     print(plant_data.head())
 
-    W2E_data = pd.read_csv("W2E.csv", sep=";", decimal=',')
+    W2E_data = pd.read_csv("MEA-w2e.csv", sep=";", decimal=',')
     X = W2E_data[['CO2%', 'Flow']]
     y = W2E_data.drop(columns=['CO2%', 'Flow'])
-
     W2E_regression = MultiOutputRegressor(LinearRegression())
     W2E_regression.fit(X, y)
+
+    CHIP_data = pd.read_csv("MEA-chip.csv", sep=";", decimal=',')
+    print(CHIP_data.head())
+
+    # Create interpolation functions for each y column
+    x1 = CHIP_data['Flow']
+    x2 = CHIP_data['Rcapture']
+    x_values = np.column_stack((x1, x2))
+    y_values = CHIP_data.drop(columns=['Flow', 'Rcapture']).values
+    
+    CHIP_interpolations = {}
+
+    for idx, column_name in enumerate(CHIP_data.drop(columns=['Flow', 'Rcapture'])):
+
+        y = y_values[:, idx]
+        interp_func = LinearNDInterpolator(x_values, y)
+        CHIP_interpolations[column_name] = interp_func
+
+
 
     # Iterate over the CHPs and call RDM model
     for index, row in plant_data.iterrows():
@@ -71,7 +89,7 @@ if __name__ == "__main__":
             RealParameter("dTmin", 6.3, 7.7),
 
             RealParameter("alpha", 5.508, 6.732),
-            # RealParameter("beta", 0.57, 0.700),
+            RealParameter("beta", 0.57, 0.700),
             RealParameter("CEPCI", 1.0909, 1.333),
             RealParameter("fixed", 0.054, 0.066),
             RealParameter("ownercost", 0.18, 0.22),
@@ -81,13 +99,12 @@ if __name__ == "__main__":
             RealParameter("i", 0.0675, 0.0825),
             IntegerParameter("t", 23, 27),
             RealParameter("celc", 36, 44),
-            RealParameter("cheat", 13.5, 16.5),
-            RealParameter("duration", 7200, 8800),
+            RealParameter("cheat", 13.5, 16.5), 
             RealParameter("cMEA", 1.8, 2.2),
         ]
         model.levers = [
-            # RealParameter("i", 0.05, 0.10),
-            RealParameter("beta", 0.57, 0.700),
+            RealParameter("duration", 4000, 6000),
+            RealParameter("rate", 78, 94),
         ]
         model.outcomes = [
             ScalarOutcome("cost_specific", ScalarOutcome.MINIMIZE),
@@ -98,13 +115,15 @@ if __name__ == "__main__":
             Constant("CHP", CHP), # Overwrite the default CHP=None value
             Constant("W2E_regression", W2E_regression),
             Constant("W2E_data", W2E_data),
+            Constant("CHIP_interpolations", CHIP_interpolations),
+            Constant("CHIP_data", CHIP_data),
         ]
         ema_logging.log_to_stderr(ema_logging.INFO)
 
         # Perform the experiments (check Sobol requirement for the number of scenarios)
         print(f"Exploring outcomes of implementing CCS at {CHP.name}:")
-        n_scenarios = 10
-        n_policies = 4
+        n_scenarios = 1000
+        n_policies = 100
 
         results = perform_experiments(model, n_scenarios, n_policies, uncertainty_sampling = Samplers.LHS, lever_sampling = Samplers.LHS)
         experiments, outcomes = results
@@ -170,18 +189,19 @@ if __name__ == "__main__":
         # # box1.inspect(4, style="graph")
         # # box1.inspect(6, style="graph")
 
-        plt.figure(figsize=(8, 10))
-        scatter = plt.scatter(df_experiments["alpha"], df_experiments["duration"], c=outcomes["cost_specific"])
-        plt.xlabel("Input: alpha [-]")
-        plt.ylabel("Input: duration [h/yr]")
-        cbar = plt.colorbar(scatter)
-        cbar.set_label("Output: specific cost [EUR/tCO2]")
+        # # FINAL PLOTTING:
+        # plt.figure(figsize=(8, 10))
+        # scatter = plt.scatter(df_experiments["alpha"], df_experiments["duration"], c=outcomes["cost_specific"])
+        # plt.xlabel("Input: alpha [-]")
+        # plt.ylabel("Input: duration [h/yr]")
+        # cbar = plt.colorbar(scatter)
+        # cbar.set_label("Output: specific cost [EUR/tCO2]")
 
-        plt.figure(figsize=(8, 10))
-        scatter = plt.scatter(df_experiments["Tlow"], outcomes["cost_specific"], c=outcomes["fuel_penalty"])
-        plt.xlabel("Input: Treturn DH [C]")
-        plt.ylabel("Output: specific cost [EUR/tCO2]")
-        cbar = plt.colorbar(scatter)
-        cbar.set_label("Output: fuel penalty [-]")
+        # plt.figure(figsize=(8, 10))
+        # scatter = plt.scatter(df_experiments["Tlow"], outcomes["cost_specific"], c=outcomes["fuel_penalty"])
+        # plt.xlabel("Input: Treturn DH [C]")
+        # plt.ylabel("Output: specific cost [EUR/tCO2]")
+        # cbar = plt.colorbar(scatter)
+        # cbar.set_label("Output: fuel penalty [-]")
         
 plt.show()

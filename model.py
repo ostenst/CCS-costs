@@ -29,12 +29,16 @@ def CCS_CHP(
     t=25,
     celc=40,
     cheat=15,
-    duration=8000,
     cMEA=2,
+
+    duration=5000,
+    rate=90,
 
     CHP=None,
     W2E_regression=None,
-    W2E_data=None
+    W2E_data=None,
+    CHIP_interpolations=None,
+    CHIP_data=None
 ):
     # Output should be one or many KPIs?
     MultiObjective = False
@@ -47,7 +51,9 @@ def CCS_CHP(
         "dTreb": dTreb,
         "Tsupp": Tsupp,
         "Tlow": Tlow,
-        "dTmin": dTmin
+        "dTmin": dTmin,
+
+        "rate": rate
     }
     
     economic_assumptions = {
@@ -69,13 +75,15 @@ def CCS_CHP(
 
     # Size MEA plant and integrate it
     Vfg, fCO2 = CHP.burn_fuel(technology_assumptions)
+    # print("VOLUME OF FLUE GASES", Vfg)
+    # print("FRACTION OF CO2", fCO2)
 
     MEA = MEA_plant(CHP)
     if CHP.fuel == "W":
+        print("/// The W2E regression does not fit the estimate_size() function! ///")
         MEA.estimate_size(W2E_regression, W2E_data)
     elif CHP.fuel == "B":
-        print("Aspen data not available for bio-chip fired")
-
+        MEA.estimate_size(CHIP_interpolations, CHIP_data)
     Plost, Qlost = CHP.energy_penalty(MEA)
 
     # Recover excess heat
@@ -114,7 +122,8 @@ def CCS_CHP(
         MEA.plot_hexchange()
         plt.show()
         raise ValueError
-
+    # MEA.plot_streams(stream_data)
+    # MEA.plot_hexchange()
     if MultiObjective:
         return CAPEX, costs, costs_specific, cost_specific, consumer_cost, energy_deficit, fuel_penalty
     else:

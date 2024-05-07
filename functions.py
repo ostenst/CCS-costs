@@ -79,10 +79,10 @@ class CHP_plant:
         A = State("A", self.psteam, self.Tsteam)
 
         max_iterations = 100
-        pcond_guess = 4
+        pcond_guess = 5
         Pestimated = 0
         i = 0
-        tol = 0.05
+        tol = 0.03
         while abs(Pestimated - Ptarget) > Ptarget*tol and i < max_iterations:
             pcond_guess = pcond_guess - 0.1
             B = State("B", p=pcond_guess, s=A.s, mix=True)
@@ -174,11 +174,9 @@ class CHP_plant:
 
         A,B,C,D = self.states
         mtot = self.Qboiler*1000 / (A.h-C.h) #WE HAVE TOO MUCH MASS; BECAUSE WE USE THE UPDATED QFUEL
-        
         TCCS = MEA.get("Treb") + dTreb
         pCCS = steamTable.psat_t(TCCS)
         # Ta = steamTable.t_ps(pCCS,A.s)
- 
         a = State("a",pCCS,s=A.s,mix=True) #NOTE: Debug? If mixed! You need to add a case if we are outside (in gas phase)
         d = State("d",pCCS,satL=True)
         mCCS = MEA.get("Qreb") / (a.h-d.h)
@@ -209,31 +207,64 @@ class MEA_plant:
         self.data = None
         self.composite_curve = None
         self.dTmin = host_plant.technology_assumptions["dTmin"]
+        self.rate = host_plant.technology_assumptions["rate"]
         self.QTdict = None
         self.economics = None
 
     def get(self, parameter):
         return self.data[parameter].values[0]
 
-    def estimate_size(self, model, Aspen_data):
-        # df = Aspen_data #TODO: Move this outside of RDM loop?
+    def estimate_size(self, interpolations, Aspen_data):
+        # df = Aspen_data #TODO: Move this outside of RDM loop? NO. We can't, since burn_fuel() relies on our technology_assumptions
         # X = df[['CO2%', 'Flow']]
         # y = df.drop(columns=['CO2%', 'Flow'])
 
         # model = MultiOutputRegressor(LinearRegression())
         # model.fit(X, y)
 
-        y = Aspen_data.drop(columns=['CO2%', 'Flow']) # Need to keep this, to be able to name the columns of predicted_df
+        # # NOTE: THE BELOW FOUR ROWS WORKED FOR OLD W2E REGRESSION WHERE "CO2%" and "Flow" WAS USED
+        # y = Aspen_data.drop(columns=['CO2%', 'Flow']) # Need to keep this, to be able to name the columns of predicted_df
     
-        # print("Estimated flue gas volume: ", self.host.Vfg, " [m3/h], or ", self.host.Vfg/3600*0.8, " [kg/s]" )
-        new_input = pd.DataFrame({'CO2%': [self.host.fCO2*100], 'Flow': [self.host.Vfg/3600*0.8]})  # Fraction of CO2=>percentage, and massflow [kg/s], of flue gases
+        # # print("Estimated flue gas volume: ", self.host.Vfg, " [m3/h], or ", self.host.Vfg/3600*0.8, " [kg/s]" )
+        # new_input = pd.DataFrame({'CO2%': [self.host.fCO2*100], 'Flow': [self.host.Vfg/3600*0.8]})  # Fraction of CO2=>percentage, and massflow [kg/s], of flue gases
 
-        predicted_y = model.predict(new_input)
-        predicted_df = pd.DataFrame(predicted_y, columns=y.columns)
+        # y = Aspen_data.drop(columns=['CO2', 'Flow', 'Rcapture']) 
+        # new_input = pd.DataFrame({'CO2': [self.host.fCO2*100], 'Flow': [self.host.Vfg/3600*0.8], 'Rcapture': [self.rate]})
 
-        # print("MEA plant is this big: ")
+        # predicted_y = model.predict(new_input)
+        # predicted_df = pd.DataFrame(predicted_y, columns=y.columns)
+
+        # print("MEA plant is this big, after assuming densityFG = 0.8kg/m3: ")
         # print(predicted_df.head())
-        self.data = predicted_df
+        # self.data = predicted_df
+        # return 
+        
+        # Initialize a dictionary to store new y values for each column
+        new_Flow = [self.host.Vfg/3600*0.8]
+        if new_Flow[0] < 3: #NOTE: my interpolation function does not work below 3 kg/s / above 170kgs
+            new_Flow = [3]
+        if new_Flow[0] > 170:
+            new_Flow = [170]
+
+        new_Rcapture = [self.rate]
+        new_y_values = {}
+
+        # Calculate new y values for each column using interpolation functions
+        for column_name, interp_func in interpolations.items():
+            new_y = interp_func((new_Flow, new_Rcapture))
+            new_y_values[column_name] = new_y
+
+        # Create a DataFrame to store the new values
+        new_data = pd.DataFrame({
+            'Flow': new_Flow,
+            'Rcapture': new_Rcapture,
+            **new_y_values  # Unpack new y values dictionary
+        })
+
+        # print("MEA plant is this big, after assuming densityFG = 0.8kg/m3: ")
+        # print(new_data.head())
+        # print("--- WITH Qint1 = ", new_data["Qint1"], " check the Tint1 temperatures in csv MEA file")
+        self.data = new_data
         return 
 
     def select_streams(self, consider_dcc):
