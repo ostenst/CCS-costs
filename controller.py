@@ -88,7 +88,7 @@ if __name__ == "__main__":
             RealParameter("Tlow", 34.2, 41.8),
             RealParameter("dTmin", 6.3, 7.7),
 
-            RealParameter("alpha", 5.508, 6.732),
+            RealParameter("alpha", 5.814, 6.426),
             RealParameter("beta", 0.57, 0.700),
             RealParameter("CEPCI", 1.0909, 1.333),
             RealParameter("fixed", 0.054, 0.066),
@@ -107,9 +107,11 @@ if __name__ == "__main__":
             RealParameter("rate", 78, 94),
         ]
         model.outcomes = [
+            ScalarOutcome("mCO2", ScalarOutcome.MAXIMIZE),
             ScalarOutcome("cost_specific", ScalarOutcome.MINIMIZE),
             ScalarOutcome("consumer_cost", ScalarOutcome.MINIMIZE),
             ScalarOutcome("fuel_penalty", ScalarOutcome.MINIMIZE),
+            ScalarOutcome("energy_deficit", ScalarOutcome.MINIMIZE),
         ]
         model.constants = [
             Constant("CHP", CHP), # Overwrite the default CHP=None value
@@ -122,8 +124,8 @@ if __name__ == "__main__":
 
         # Perform the experiments (check Sobol requirement for the number of scenarios)
         print(f"Exploring outcomes of implementing CCS at {CHP.name}:")
-        n_scenarios = 1000
-        n_policies = 100
+        n_scenarios = 200
+        n_policies = 4
 
         results = perform_experiments(model, n_scenarios, n_policies, uncertainty_sampling = Samplers.LHS, lever_sampling = Samplers.LHS)
         experiments, outcomes = results
@@ -138,8 +140,8 @@ if __name__ == "__main__":
 
         # data["policy"] = experiments["policy"] #add the policy-information of my experiments, to the outcomes
         # sns.pairplot(data, hue="policy", vars=list(outcomes.keys()))
-        data["beta"] = experiments["beta"] #add the policy-information of my experiments, to the outcomes
-        sns.pairplot(data, hue="beta", vars=list(outcomes.keys()))
+        data["duration"] = experiments["duration"] #add the policy-information of my experiments, to the outcomes
+        sns.pairplot(data, hue="duration", vars=list(outcomes.keys()))
 
         # # Perform SA
         # print(f"\nPerforming Sobol SA for {CHP.name}:")

@@ -119,7 +119,7 @@ class CHP_plant:
         elif self.fuel == "W":
             self.fCO2 = technology_assumptions["fCO2_W"]
 
-        self.mCO2 = self.Qfuel * 0.355  # [tCO2/h]
+        self.mCO2 = self.Qfuel * 0.400  # [tCO2/h]  old value was 0.355
         self.Vfg = 2000000 / 110 * self.mCO2 / (self.fCO2 / 0.04)  # [m3/h]
 
         return self.Vfg, self.fCO2

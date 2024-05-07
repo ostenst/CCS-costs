@@ -110,6 +110,8 @@ def CCS_CHP(
     energy_deficit = (Plost + (Qlost - Qrecovered))*economic_assumptions['duration']            # MWh/yr
     fuel_penalty = (Plost + (Qlost - Qrecovered))/(CHP.Qfuel)                                   # % of input fuel used for capture
 
+    mCO2 = CHP.mCO2 * MEA.rate/100 * economic_assumptions["duration"] #tCO2/yr
+
     if fuel_penalty < 0: # NOTE: Include this criteria in the real analysis later
         print(" ")
         print("These assumptions are unfeasible:")
@@ -127,7 +129,7 @@ def CCS_CHP(
     if MultiObjective:
         return CAPEX, costs, costs_specific, cost_specific, consumer_cost, energy_deficit, fuel_penalty
     else:
-        return [cost_specific, consumer_cost, fuel_penalty]
+        return [mCO2, cost_specific, consumer_cost, fuel_penalty, energy_deficit]
 
 
 
