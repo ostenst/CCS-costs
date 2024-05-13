@@ -128,12 +128,12 @@ if __name__ == "__main__":
 
         # Perform the experiments (check Sobol requirement for the number of scenarios)
         print(f"Exploring outcomes of implementing CCS at {CHP.name}:")
-        n_scenarios = 3
-        n_policies = 1
+        n_scenarios = 4
+        n_policies = 3
 
         results = perform_experiments(model, n_scenarios, n_policies, uncertainty_sampling = Samplers.LHS, lever_sampling = Samplers.LHS)
         experiments, outcomes = results
-        CHP.plot_plant()
+        # CHP.plot_plant()
     
         # Convert experiments to DataFrames and save
         df_experiments = pd.DataFrame(experiments)
@@ -146,17 +146,17 @@ if __name__ == "__main__":
         data.to_csv("outcomes.csv", index=False)
         all_data = pd.concat([all_data, data], ignore_index=True)
 
-        # Plotting results
-        data["duration"] = experiments["duration"] #add the policy-information of my experiments, to the outcomes
-        sns.pairplot(data, hue="duration", vars=list(outcomes.keys()))
+        # # Plotting results
+        # data["duration"] = experiments["duration"] #add the policy-information of my experiments, to the outcomes
+        # sns.pairplot(data, hue="duration", vars=list(outcomes.keys()))
 
-        plt.figure(figsize=(8, 6))
-        plt.scatter(df_experiments['duration'], df_experiments['beta'], c=data['cost_specific'], cmap='viridis', label='cost')
-        plt.colorbar(label='Y')  # Add color bar legend
-        plt.xlabel('duration')
-        plt.ylabel('beta')
-        plt.title('duration vs beta Colored by Y')
-        plt.legend()
+        # plt.figure(figsize=(8, 6))
+        # plt.scatter(df_experiments['duration'], df_experiments['beta'], c=data['cost_specific'], cmap='viridis', label='cost')
+        # plt.colorbar(label='Y')  # Add color bar legend
+        # plt.xlabel('duration')
+        # plt.ylabel('beta')
+        # plt.title('duration vs beta Colored by Y')
+        # plt.legend()
         # plt.show()
 
         # # Perform SD:

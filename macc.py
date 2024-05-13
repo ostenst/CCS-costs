@@ -48,12 +48,16 @@ cmap = cm.viridis
 for rectangle in sorted_rectangles:
 
     x_end = x_start + rectangle.width/1000
+    # for i, row in rectangle.outcomes.iterrows():
+    #     color_i = cmap(norm(rectangle.experiments['duration'][i]))
+
+    #     ax.plot([x_start, x_end], [row["cost_specific"], row["cost_specific"]], color=color_i , alpha = 1)
     for i, row in rectangle.outcomes.iterrows():
-        color_i = cmap(norm(rectangle.experiments['duration'][i]))
+        # color_i = cmap(norm(rectangle.experiments['duration'][i]))
 
-        ax.plot([x_start, x_end], [row["cost_specific"], row["cost_specific"]], color=color_i , alpha = 1)
+        ax.plot([x_start, x_end], [row["cost_specific"], row["cost_specific"]], color="black" , alpha = 0.07)
 
-    ax.plot([x_start, x_end], [rectangle.mean, rectangle.mean], color='black')
+    ax.plot([x_start, x_end], [rectangle.mean, rectangle.mean], color='red')
     x_start = x_end  # Update the starting point for the next rectangle
 
 # Set axis labels and title

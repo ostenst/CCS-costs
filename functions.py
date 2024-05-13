@@ -78,11 +78,12 @@ class CHP_plant:
         Qdh = self.Qdh
         A = State("A", self.psteam, self.Tsteam)
 
-        max_iterations = 100
-        pcond_guess = 5
+        max_iterations = 10000
+        # pcond_guess = 6
+        pcond_guess = self.psteam
         Pestimated = 0
         i = 0
-        tol = 0.03
+        tol = 0.05
         while abs(Pestimated - Ptarget) > Ptarget*tol and i < max_iterations:
             pcond_guess = pcond_guess - 0.1
             B = State("B", p=pcond_guess, s=A.s, mix=True)
@@ -90,6 +91,7 @@ class CHP_plant:
             msteam = Qdh/(B.h-C.h)
             Pestimated = msteam*(A.h-B.h)
             i += 1
+
         if i == max_iterations:
             print(self.name)
             raise ValueError("Couldn't estimate Rankine cycle!")
