@@ -35,7 +35,7 @@ from scipy.interpolate import LinearNDInterpolator
 if __name__ == "__main__":
 
     # Read data and fit regressors
-    plant_data = pd.read_csv("plants-chip.csv", sep=";", decimal=',')
+    plant_data = pd.read_csv("plants-chip-all.csv", sep=";", decimal=',')
     print(plant_data.head())
 
     W2E_data = pd.read_csv("MEA-w2e.csv", sep=";", decimal=',')
@@ -46,6 +46,9 @@ if __name__ == "__main__":
 
     CHIP_data = pd.read_csv("MEA-chip.csv", sep=";", decimal=',')
     print(CHIP_data.head())
+
+    all_experiments = pd.DataFrame()
+    all_data = pd.DataFrame()
 
     # Create interpolation functions for each y column
     x1 = CHIP_data['Flow']
@@ -61,8 +64,6 @@ if __name__ == "__main__":
         interp_func = LinearNDInterpolator(x_values, y)
         CHIP_interpolations[column_name] = interp_func
 
-
-
     # Iterate over the CHPs and call RDM model
     for index, row in plant_data.iterrows():
 
@@ -76,6 +77,9 @@ if __name__ == "__main__":
                 Tsteam=float(row["Live steam temperature (degC)"]),
                 psteam=float(row["Live steam pressure (bar)"])
             )
+        
+        if CHP.fuel == "W": # Model currently only works with wood chips, i.e. B
+            continue
         CHP.estimate_rankine()
 
         model = Model("CCSproblem", function=CCS_CHP)       
@@ -89,7 +93,7 @@ if __name__ == "__main__":
             RealParameter("dTmin", 6.3, 7.7),
 
             RealParameter("alpha", 5.814, 6.426),
-            RealParameter("beta", 0.57, 0.700),
+            RealParameter("beta", 0.60, 0.67),
             RealParameter("CEPCI", 1.0909, 1.333),
             RealParameter("fixed", 0.054, 0.066),
             RealParameter("ownercost", 0.18, 0.22),
@@ -124,61 +128,45 @@ if __name__ == "__main__":
 
         # Perform the experiments (check Sobol requirement for the number of scenarios)
         print(f"Exploring outcomes of implementing CCS at {CHP.name}:")
-        n_scenarios = 200
-        n_policies = 4
+        n_scenarios = 3
+        n_policies = 1
 
         results = perform_experiments(model, n_scenarios, n_policies, uncertainty_sampling = Samplers.LHS, lever_sampling = Samplers.LHS)
         experiments, outcomes = results
         CHP.plot_plant()
     
-        # Convert experiments to a DataFrame
+        # Convert experiments to DataFrames and save
         df_experiments = pd.DataFrame(experiments)
+        df_experiments["Name"] = CHP.name
         df_experiments.to_csv("experiments.csv", index=False)
+        all_experiments = pd.concat([all_experiments, df_experiments], ignore_index=True)
 
         data = pd.DataFrame(outcomes)
+        data["Name"] = CHP.name
         data.to_csv("outcomes.csv", index=False)
+        all_data = pd.concat([all_data, data], ignore_index=True)
 
-        # data["policy"] = experiments["policy"] #add the policy-information of my experiments, to the outcomes
-        # sns.pairplot(data, hue="policy", vars=list(outcomes.keys()))
+        # Plotting results
         data["duration"] = experiments["duration"] #add the policy-information of my experiments, to the outcomes
         sns.pairplot(data, hue="duration", vars=list(outcomes.keys()))
 
-        # # Perform SA
-        # print(f"\nPerforming Sobol SA for {CHP.name}:")
-        # plt.figure(figsize=(6, 70))
-        # x = experiments
-        # y = outcomes
-        # fs = feature_scoring.get_feature_scores_all(x, y)
-        # sns.heatmap(fs, cmap="viridis", annot=True)
-
-        # # sobol_stats, s2, s2_conf = analyze(model, results, "cost_specific")
-        # # print(sobol_stats.head(20))
-        # sa_results = perform_experiments(model, scenarios=10, uncertainty_sampling=Samplers.SOBOL)
-        # experiments, sa_outcomes = sa_results
-
-        # problem = get_SALib_problem(model.uncertainties)
-        # Si = sobol.analyze(problem, sa_outcomes["cost_specific"], calc_second_order=True, print_to_console=False)
-        # scores_filtered = {k: Si[k] for k in ["ST", "ST_conf", "S1", "S1_conf"]}
-        # Si_df = pd.DataFrame(scores_filtered, index=problem["names"])
-
-        # sns.set_style("white")
-        # fig, ax = plt.subplots(1)
-
-        # indices = Si_df[["S1", "ST"]]
-        # err = Si_df[["S1_conf", "ST_conf"]]
-
-        # indices.plot.bar(yerr=err.values.T, ax=ax, colormap='viridis')
-        # fig.set_size_inches(8, 6)
-        # fig.subplots_adjust(bottom=0.3)
+        plt.figure(figsize=(8, 6))
+        plt.scatter(df_experiments['duration'], df_experiments['beta'], c=data['cost_specific'], cmap='viridis', label='cost')
+        plt.colorbar(label='Y')  # Add color bar legend
+        plt.xlabel('duration')
+        plt.ylabel('beta')
+        plt.title('duration vs beta Colored by Y')
+        plt.legend()
+        # plt.show()
 
         # # Perform SD:
-        # x = df_experiments.iloc[:, 0:21]
-        # y = outcomes["cost_specific"] > 70
+        # x = df_experiments.iloc[:, 0:22]
+        # y = data["cost_specific"] < 50
         # # y = data.iloc[:, 15].values
         # prim_alg = prim.Prim(x, y, threshold=0.8, peel_alpha=0.1)
         # box1 = prim_alg.find_box()
         # box1.show_tradeoff()
-        # # box1.inspect(2, style="graph")
+        # box1.inspect(13, style="graph")
         # # box1.inspect(4, style="graph")
         # # box1.inspect(6, style="graph")
 
@@ -189,21 +177,12 @@ if __name__ == "__main__":
         # box1.show_tradeoff()
         # # box1.inspect(2, style="graph")
         # # box1.inspect(4, style="graph")
-        # # box1.inspect(6, style="graph")
+        # box1.inspect(12, style="graph")
 
-        # # FINAL PLOTTING:
-        # plt.figure(figsize=(8, 10))
-        # scatter = plt.scatter(df_experiments["alpha"], df_experiments["duration"], c=outcomes["cost_specific"])
-        # plt.xlabel("Input: alpha [-]")
-        # plt.ylabel("Input: duration [h/yr]")
-        # cbar = plt.colorbar(scatter)
-        # cbar.set_label("Output: specific cost [EUR/tCO2]")
+        # HERE A MACC OBJECT SHOULD BE SAVED.
 
-        # plt.figure(figsize=(8, 10))
-        # scatter = plt.scatter(df_experiments["Tlow"], outcomes["cost_specific"], c=outcomes["fuel_penalty"])
-        # plt.xlabel("Input: Treturn DH [C]")
-        # plt.ylabel("Output: specific cost [EUR/tCO2]")
-        # cbar = plt.colorbar(scatter)
-        # cbar.set_label("Output: fuel penalty [-]")
+    # Loop is done. Now it's time to construct my "global" resuls, e.g. the MACC curve.
+    all_experiments.to_csv("all_experiments.csv", index=False)
+    all_data.to_csv("all_outcomes.csv", index=False)
         
 plt.show()

@@ -106,6 +106,8 @@ class CHP_plant:
         if msteam is not None and Pestimated is not None and Qboiler > 0 and pcond_guess > 0:
             return
         else:
+            print(self.name)
+            print(self.states[0].T)
             raise ValueError("One or more of the variables (msteam, Pestimated, Qboiler, pcond_guess) is not positive.")
         
     def burn_fuel(self, technology_assumptions):
