@@ -44,7 +44,7 @@ instructions = {}
 instructions[axs[0]] = {"nlines":"single"}
 instructions[axs[1]] = {"nlines":"multiple", "color":"green", "alpha":0.3, "extremes":"yes"}
 instructions[axs[2]] = {"nlines":"multiple", "colormap":"duration"}
-instructions[axs[3]] = {"nlines":"multiple", "colormap":"duration", "scenario":5500}
+instructions[axs[3]] = {"nlines":"multiple", "colormap":"duration", "scenario":4200} #NOTE: MAYBE PLACE cheat HERE?
 
 x_start = 0
 
@@ -74,7 +74,7 @@ for ax, instruct in instructions.items():
                     alpha = instruct["alpha"]
 
                 if "scenario" in instruct:
-                    if rectangle.experiments[feature][i] >= instruct["scenario"]:
+                    if rectangle.experiments[feature][i] >= instruct["scenario"] and rectangle.experiments["cheat"][i] < 76: #NOTE: THIS IS MY PRIM SCENARIO FOUND
                         color_i = "lime"
                     else:
                         color_i = "grey"
