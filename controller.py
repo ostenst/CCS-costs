@@ -84,30 +84,30 @@ if __name__ == "__main__":
 
         model = Model("CCSproblem", function=CCS_CHP)       
         model.uncertainties = [
-            RealParameter("eta_boiler", 0.783, 0.957),
-            RealParameter("fCO2_B", 0.144, 0.176),
-            RealParameter("fCO2_W", 0.099, 0.121),
-            RealParameter("dTreb", 9, 11),
-            RealParameter("Tsupp", 77.4, 94.6),
-            RealParameter("Tlow", 34.2, 41.8),
-            RealParameter("dTmin", 6.3, 7.7),
+            RealParameter("eta_boiler", 0.92, 0.96),
+            RealParameter("fCO2_B", 0.13, 0.18),    #6% from BEIRON, SwedenMACC
+            RealParameter("fCO2_W", 0.09, 0.15),
+            RealParameter("dTreb", 7, 12),
+            RealParameter("Tsupp", 78, 100),        #From Kåre
+            RealParameter("Tlow", 43, 55),
+            RealParameter("dTmin", 5, 10),
 
-            RealParameter("alpha", 5.814, 6.426),
+            RealParameter("alpha", 5.8, 6.5),       #From Eliasson, 2021
             RealParameter("beta", 0.60, 0.67),
             RealParameter("CEPCI", 1.0909, 1.333),
-            RealParameter("fixed", 0.054, 0.066),
-            RealParameter("ownercost", 0.18, 0.22),
-            RealParameter("WACC", 0.045, 0.055),
-            IntegerParameter("yexpenses", 2, 4),
-            RealParameter("rescalation", 0.027, 0.033),
-            RealParameter("i", 0.0675, 0.0825),
-            IntegerParameter("t", 23, 27),
-            RealParameter("celc", 36, 44),
-            RealParameter("cheat", 13.5, 16.5), 
-            RealParameter("cMEA", 1.8, 2.2),
+            RealParameter("fixed", 0.04, 0.08),     #6% from BEIRON, SwedenMACC
+            RealParameter("ownercost", 0.10, 0.25), #20% from NETL, cost methdoology osti.gov
+            RealParameter("WACC", 0.03, 0.07),      #~5% from NETL? Ish
+            IntegerParameter("yexpenses", 2, 5),
+            RealParameter("rescalation", 0.02, 0.04), #~3% NETL
+            RealParameter("i", 0.04, 0.15),
+            IntegerParameter("t", 22, 32),
+            RealParameter("celc", 30, 180),
+            RealParameter("cheat", 50, 180), 
+            RealParameter("cMEA", 1.2, 2.8),
         ]
         model.levers = [
-            RealParameter("duration", 4000, 6000),
+            RealParameter("duration", 3000, 6000),
             RealParameter("rate", 78, 94),
         ]
         model.outcomes = [
@@ -128,8 +128,8 @@ if __name__ == "__main__":
 
         # Perform the experiments (check Sobol requirement for the number of scenarios)
         print(f"Exploring outcomes of implementing CCS at {CHP.name}:")
-        n_scenarios = 5
-        n_policies = 5
+        n_scenarios = 10
+        n_policies = 10
 
         results = perform_experiments(model, n_scenarios, n_policies, uncertainty_sampling = Samplers.LHS, lever_sampling = Samplers.LHS)
         experiments, outcomes = results

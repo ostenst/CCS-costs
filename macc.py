@@ -89,7 +89,7 @@ for ax, instruct in instructions.items():
     ax.set_xlabel('Cumulative amount of CO2 captured [kt/yr]')
     ax.set_ylabel('Cost of CO2 capture [EUR/tCO2]')
     ax.set_xlim(0, x_start + 30)  # Set x-axis limits based on the total width of all rectangles
-    ax.set_ylim(-30, 300)  # Set y-axis limits based on the specified height H
+    ax.set_ylim(-30, 400)  # Set y-axis limits based on the specified height H
 
 # Set a common title for the figure
 fig.suptitle('MACC for capturing CO2 at Swedish CHPs')

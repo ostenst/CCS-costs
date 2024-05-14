@@ -382,7 +382,7 @@ class MEA_plant:
             CAPEX *= 1 + X['ownercost']
             escalation = sum((1 + X['rescalation']) ** (n - 1) * (1 / X['yexpenses']) for n in range(1, X['yexpenses'] + 1))
             cfunding = sum(X['WACC'] * (X['yexpenses'] - n + 1) * (1 + X['rescalation']) ** (n - 1) * (1 / X['yexpenses']) for n in range(1, X['yexpenses'] + 1))
-            CAPEX *= escalation + cfunding                      #This is TASC.
+            CAPEX *= escalation + cfunding                      #This is TASC. #Cost Estimation Methodology for NETL Assessments of Power Plant Performancen NETL costs
             #TODO: we can include system_contingency if we consider HPC a FOAK. This could be +0-30% maybe? (Towards, Rubin)
 
         annualization = (X['i'] * (1 + X['i']) ** X['t']) / ((1 + X['i']) ** X['t'] - 1)
