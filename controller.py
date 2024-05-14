@@ -146,7 +146,7 @@ if __name__ == "__main__":
         data.to_csv("outcomes.csv", index=False)
         all_data = pd.concat([all_data, data], ignore_index=True)
 
-        # # Plotting results
+        # # Plotting results NOTE: DO NOT PLOT IF MANY PLANTS
         # data["duration"] = experiments["duration"] #add the policy-information of my experiments, to the outcomes
         # sns.pairplot(data, hue="duration", vars=list(outcomes.keys()))
 
@@ -158,28 +158,6 @@ if __name__ == "__main__":
         # plt.title('duration vs beta Colored by Y')
         # plt.legend()
         # plt.show()
-
-        # # Perform SD:
-        # x = df_experiments.iloc[:, 0:22]
-        # y = data["cost_specific"] < 50
-        # # y = data.iloc[:, 15].values
-        # prim_alg = prim.Prim(x, y, threshold=0.8, peel_alpha=0.1)
-        # box1 = prim_alg.find_box()
-        # box1.show_tradeoff()
-        # box1.inspect(13, style="graph")
-        # # box1.inspect(4, style="graph")
-        # # box1.inspect(6, style="graph")
-
-        # y = outcomes["fuel_penalty"] < 0.13
-        # # y = data.iloc[:, 15].values
-        # prim_alg = prim.Prim(x, y, threshold=0.8, peel_alpha=0.1)
-        # box1 = prim_alg.find_box()
-        # box1.show_tradeoff()
-        # # box1.inspect(2, style="graph")
-        # # box1.inspect(4, style="graph")
-        # box1.inspect(12, style="graph")
-
-        # HERE A MACC OBJECT SHOULD BE SAVED.
 
     # Loop is done. Now it's time to construct my "global" resuls, e.g. the MACC curve.
     all_experiments.to_csv("all_experiments.csv", index=False)
