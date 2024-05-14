@@ -37,14 +37,14 @@ for name in unique_names:
 sorted_rectangles = sorted(rectangles, key=lambda x: x.mean)
 
 # BEGIN PLOTTING
-fig, axs = plt.subplots(2, 2, figsize=(15, 10))  # Create 4 subplots in a 2x2 grid
+fig, axs = plt.subplots(3, 1, figsize=(15, 18))  # Create 4 subplots in a 2x2 grid
 axs = axs.flatten()
 
 instructions = {}
 instructions[axs[0]] = {"nlines":"single"}
-instructions[axs[1]] = {"nlines":"multiple", "color":"green", "alpha":0.3, "extremes":"yes"}
-instructions[axs[2]] = {"nlines":"multiple", "colormap":"duration"}
-instructions[axs[3]] = {"nlines":"multiple", "colormap":"duration", "scenario":4200} #NOTE: MAYBE PLACE cheat HERE?
+instructions[axs[1]] = {"nlines":"multiple", "color":"grey", "alpha":0.3, "extremes":"yes"}
+# instructions[axs[2]] = {"nlines":"multiple", "colormap":"duration"}
+instructions[axs[2]] = {"nlines":"multiple", "colormap":"duration", "scenario":5000} #NOTE: MAYBE PLACE cheat HERE?
 
 x_start = 0
 
@@ -60,6 +60,10 @@ for ax, instruct in instructions.items():
         
     for rectangle in sorted_rectangles:
         x_end = x_start + rectangle.width / 1000
+        
+        if rectangle.name in ["Vartaverket KVV 8 ","Eskilstuna KVV", "Sveg KVV"]:
+            axs[0].annotate(rectangle.name, xy=((x_start+x_end)/2, rectangle.mean), xytext=(x_start, rectangle.mean-100), 
+                            arrowprops=dict(facecolor='grey', arrowstyle='->', color='grey'), fontsize=13, color='grey')
 
         # Multiple lines?
         if instruct["nlines"] == "multiple":
@@ -74,31 +78,33 @@ for ax, instruct in instructions.items():
                     alpha = instruct["alpha"]
 
                 if "scenario" in instruct:
-                    if rectangle.experiments[feature][i] >= instruct["scenario"] and rectangle.experiments["cheat"][i] < 76: #NOTE: THIS IS MY PRIM SCENARIO FOUND
-                        color_i = "lime"
+                    if rectangle.experiments[feature][i] >= instruct["scenario"] and rectangle.experiments["cheat"][i] < 90: #NOTE: THIS IS MY PRIM SCENARIO FOUND
+                        color_i = "green"
                     else:
                         color_i = "grey"
-                    alpha = 0.4
+                    alpha = 0.3
 
                 ax.plot([x_start, x_end], [row["cost_specific"], row["cost_specific"]], color=color_i, alpha=alpha)
 
         ax.plot([x_start, x_end], [rectangle.mean, rectangle.mean], color='black')
         x_start = x_end  # Update the starting point for the next rectangle
 
+
     # Set axis labels and title for each subplot
-    ax.set_xlabel('Cumulative amount of CO2 captured [kt/yr]')
-    ax.set_ylabel('Cost of CO2 capture [EUR/tCO2]')
+    ax.set_ylabel('Cost of CO2 capture [EUR/tCO2]', fontsize=12)
     ax.set_xlim(0, x_start + 30)  # Set x-axis limits based on the total width of all rectangles
     ax.set_ylim(-30, 400)  # Set y-axis limits based on the specified height H
-
+axs[2].set_xlabel('Cumulative amount of CO2 captured [kt/yr]', fontsize=12)
+axs[2].annotate("Scenarios of high capacity factors and low district heating prices, found by PRIM", xy=(3700, 100), xytext=(2800, 30), 
+                            arrowprops=dict(facecolor='green', arrowstyle='->', color='green'), fontsize=13, color='green')
 # Set a common title for the figure
-fig.suptitle('MACC for capturing CO2 at Swedish CHPs')
+fig.suptitle('Marginal Abatement Cost Curve (MACC) for capturing CO2 at Swedish CHPs', fontsize=13)
 
 # Comment out the colorbar for now
-sm = plt.cm.ScalarMappable(cmap=cmap, norm=norm)
-sm.set_array([])
-cbar = plt.colorbar(sm, ax=axs, orientation='horizontal')
-cbar.set_label('Capacity factor [h/yr]')
+# sm = plt.cm.ScalarMappable(cmap=cmap, norm=norm)
+# sm.set_array([])
+# cbar = plt.colorbar(sm, ax=axs, orientation='horizontal')
+# cbar.set_label('Capacity factor [h/yr]')
 
-plt.savefig('MACC.png')
+plt.savefig('MACC.png', dpi=600)
 plt.show()

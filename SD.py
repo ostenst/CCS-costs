@@ -21,14 +21,14 @@ for name in unique_names:
     subset_mean = subset["cost_specific"].mean()
 
     # Append the subset if it has a mean below 250EUR/t
-    if subset_mean < 250:
+    if subset_mean < 220:
         scenario_subset = pd.concat( [scenario_subset, experiments[experiments['Name'] == name] ], ignore_index=True)
 
 print(scenario_subset.shape)
 print(scenario_subset.head())
 
 x = experiments.iloc[:, 0:22]
-y = outcomes["cost_specific"] < 180
+y = outcomes["cost_specific"] < 150
 y = y.astype(int)
 
 # Pre-made PRIM:
