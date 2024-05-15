@@ -37,14 +37,14 @@ for name in unique_names:
 sorted_rectangles = sorted(rectangles, key=lambda x: x.mean)
 
 # BEGIN PLOTTING
-fig, axs = plt.subplots(3, 1, figsize=(15, 18))  # Create 4 subplots in a 2x2 grid
+fig, axs = plt.subplots(3, 1, figsize=(15, 16))  # Create 4 subplots in a 2x2 grid
 axs = axs.flatten()
 
 instructions = {}
 instructions[axs[0]] = {"nlines":"single"}
-instructions[axs[1]] = {"nlines":"multiple", "color":"grey", "alpha":0.3, "extremes":"yes"}
+instructions[axs[1]] = {"nlines":"multiple", "color":"grey", "alpha":0.1, "extremes":"yes"}
 # instructions[axs[2]] = {"nlines":"multiple", "colormap":"duration"}
-instructions[axs[2]] = {"nlines":"multiple", "colormap":"duration", "scenario":5000} #NOTE: MAYBE PLACE cheat HERE?
+instructions[axs[2]] = {"nlines":"multiple", "colormap":"duration", "scenario":5200} #NOTE: MAYBE PLACE cheat HERE?
 
 x_start = 0
 
@@ -78,11 +78,12 @@ for ax, instruct in instructions.items():
                     alpha = instruct["alpha"]
 
                 if "scenario" in instruct:
-                    if rectangle.experiments[feature][i] >= instruct["scenario"] and rectangle.experiments["cheat"][i] < 90: #NOTE: THIS IS MY PRIM SCENARIO FOUND
+                    if rectangle.experiments[feature][i] >= instruct["scenario"] and rectangle.experiments["cheat"][i] < 80: #NOTE: THIS IS MY PRIM SCENARIO FOUND
                         color_i = "green"
+                        alpha = 0.3
                     else:
                         color_i = "grey"
-                    alpha = 0.3
+                        alpha = 0.1
 
                 ax.plot([x_start, x_end], [row["cost_specific"], row["cost_specific"]], color=color_i, alpha=alpha)
 

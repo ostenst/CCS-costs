@@ -31,6 +31,23 @@ from ema_workbench.em_framework.evaluators import Samplers
 from model import CCS_CHP
 from scipy.interpolate import LinearNDInterpolator
 
+def analyze(results, ema_model, ooi):
+    """analyze results using SALib sobol, returns a dataframe"""
+
+    _, outcomes = results
+
+    problem = get_SALib_problem(ema_model.uncertainties)
+    y = outcomes[ooi]
+    sobol_indices = sobol.analyze(problem, y)
+    sobol_stats = {key: sobol_indices[key] for key in ["ST", "ST_conf", "S1", "S1_conf"]}
+    sobol_stats = pd.DataFrame(sobol_stats, index=problem["names"])
+    sobol_stats.sort_values(by="ST", ascending=False)
+    s2 = pd.DataFrame(sobol_indices["S2"], index=problem["names"], columns=problem["names"])
+    s2_conf = pd.DataFrame(
+        sobol_indices["S2_conf"], index=problem["names"], columns=problem["names"]
+    )
+
+    return sobol_stats, s2, s2_conf
 
 if __name__ == "__main__":
 
@@ -85,7 +102,7 @@ if __name__ == "__main__":
         model = Model("CCSproblem", function=CCS_CHP)       
         model.uncertainties = [
             RealParameter("eta_boiler", 0.92, 0.96),
-            RealParameter("fCO2_B", 0.13, 0.18),    #6% from BEIRON, SwedenMACC
+            RealParameter("fCO2_B", 0.13, 0.18),    # from BEIRON, SwedenMACC
             RealParameter("fCO2_W", 0.09, 0.15),
             RealParameter("dTreb", 7, 12),
             RealParameter("Tsupp", 78, 100),        #From Kåre
@@ -128,7 +145,7 @@ if __name__ == "__main__":
 
         # Perform the experiments (check Sobol requirement for the number of scenarios)
         print(f"Exploring outcomes of implementing CCS at {CHP.name}:")
-        n_scenarios = 10
+        n_scenarios = 100
         n_policies = 10
 
         results = perform_experiments(model, n_scenarios, n_policies, uncertainty_sampling = Samplers.LHS, lever_sampling = Samplers.LHS)
@@ -145,6 +162,14 @@ if __name__ == "__main__":
         data["Name"] = CHP.name
         data.to_csv("outcomes.csv", index=False)
         all_data = pd.concat([all_data, data], ignore_index=True)
+
+        # # Perform SA here? GOAL: To make a very distinct MACC. Don't need crazy runs, just many, for PRIM to find. But I need to know what to constrain to. So Sobol is good
+        # if CHP.name == "Vartaverket KVV 8 ":
+        #     results = perform_experiments(model, n_scenarios, n_policies, uncertainty_sampling = Samplers.SOBOL, lever_sampling = Samplers.SOBOL)
+        #     sobol_stats, s2, s2_conf = analyze(results, model,"cost_specific")
+        #     print(sobol_stats)
+        #     print(s2)
+        #     print(s2_conf)
 
         # # Plotting results NOTE: DO NOT PLOT IF MANY PLANTS
         # data["duration"] = experiments["duration"] #add the policy-information of my experiments, to the outcomes
