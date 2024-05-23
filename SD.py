@@ -53,7 +53,7 @@ Data = PrimedData(x, y)
 # peeling_trajectory = []
 # box = Box(id=0)
 # box.calculate(Data)
-# peeling_trajectory = prim_recursive(Data, box, peeling_trajectory, max_iterations=40, constrained_to=["duration", "cheat"], objective_function="LENIENT1")
+# peeling_trajectory = prim_recursive(Data, box, peeling_trajectory, max_iterations=40, constrained_to=["duration", "fCO2_B", "cheat", "i"], objective_function="LENIENT1")
 # peeling_trajectory[3].print_info()
 # peeling_trajectory[9].print_info()
 # peeling_trajectory[24].print_info()
@@ -70,7 +70,7 @@ Data = PrimedData(x, y)
 # plt.ylabel('Density')
 # plt.xlim(0, 1.2)
 # plt.ylim(0, 1.2)
-# plt.colorbar(label='Number of Limits')
+# plt.colorbar(label='Number of Constrained dimensions')
 
 # plt.show()
 # Create a new plot object
