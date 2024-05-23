@@ -174,7 +174,7 @@ class Cluster:
         self.updated = False
 
     def __str__(self):
-        return f"Numerical Centroid: {self.c_num}, Categorical Centroid (Modes): {self.c_cat}"
+        return f"n: {self.size}, Numerical Centroid: {self.c_num}, Categorical Centroid (Modes): {self.c_cat}"
 
     def calculate_distances(self, example, categorical_weight, ignore): 
         # Identifying the numerical and categorical features to consider when calculating distance

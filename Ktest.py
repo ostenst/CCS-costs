@@ -23,8 +23,8 @@ print("Normalized Data head:\n", data.head())
 clusters = []
 # clusters.append(Cluster(c_num=[0.4]*22, c_cat={"Label": {"Uninteresting": 0}}, name="C1")) # These first centroids need to match everything else!
 # clusters.append(Cluster(c_num=[0.6]*22, c_cat={"Label": {"Interesting": 0}}, name="C2"))
-clusters.append(Cluster(c_num=[0.4]*5, c_cat={}, name="C1")) # These first centroids need to match everything else!
-clusters.append(Cluster(c_num=[0.6]*5, c_cat={}, name="C2"))
+clusters.append(Cluster(c_num=[0.3]*5, c_cat={}, name="C1")) # These first centroids need to match everything else!
+clusters.append(Cluster(c_num=[0.8]*5, c_cat={}, name="C2"))
 
 all_columns = data.columns.tolist()
 # outcome_columns = outcomes.columns.tolist()
@@ -38,7 +38,7 @@ for column in ["duration","cheat","i","celc","fCO2_B"]:
 # ignore_columns += outcome_columns
 
 # ASSIGN EXAMPLES TO clusters, AND ITERATE
-data, clusters = cluster_dataframe(data, clusters, iterations=10, interesting_weight=1, categorical_weight=0.5, ignore=ignore_columns)
+data, clusters = cluster_dataframe(data, clusters, iterations=5, interesting_weight=0.5, categorical_weight=0.5, ignore=ignore_columns)
 
 
 # Plot originally scaled data
